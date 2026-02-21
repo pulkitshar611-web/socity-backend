@@ -9,7 +9,7 @@ class UnitController {
       }
       const units = await prisma.unit.findMany({
         where,
-        include: { owner: true, tenant: true },
+        include: { owner: true, tenant: true, wallet: true },
         orderBy: [{ block: 'asc' }, { number: 'asc' }]
       });
       res.json(units);
@@ -20,18 +20,18 @@ class UnitController {
 
   static async getById(req, res) {
     try {
-       const { id } = req.params;
-       const unit = await prisma.unit.findUnique({
-           where: { id: parseInt(id) },
-           include: { owner: true, tenant: true, parkingSlots: true, visitors: true }
-       });
-       if (!unit) return res.status(404).json({ error: 'Unit not found' });
-       if (req.user.role !== 'SUPER_ADMIN' && unit.societyId !== req.user.societyId) {
-         return res.status(403).json({ error: 'Access denied: unit belongs to another society' });
-       }
-       res.json(unit);
+      const { id } = req.params;
+      const unit = await prisma.unit.findUnique({
+        where: { id: parseInt(id) },
+        include: { owner: true, tenant: true, parkingSlots: true, visitors: true, wallet: true }
+      });
+      if (!unit) return res.status(404).json({ error: 'Unit not found' });
+      if (req.user.role !== 'SUPER_ADMIN' && unit.societyId !== req.user.societyId) {
+        return res.status(403).json({ error: 'Access denied: unit belongs to another society' });
+      }
+      res.json(unit);
     } catch (error) {
-       res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error.message });
     }
   }
 
@@ -39,7 +39,7 @@ class UnitController {
     try {
       const { block, number, floor, type, areaSqFt, societyId } = req.body;
       const finalSocietyId = parseInt(societyId || req.user.societyId);
-      
+
       if (!finalSocietyId) {
         return res.status(400).json({ error: 'Society ID is required' });
       }

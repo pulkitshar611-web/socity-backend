@@ -4,14 +4,9 @@ const fs = require("fs");
 const path = require("path");
 
 // Use Artifact Directory for guaranteed access
-const DEBUG_LOG_PATH =
-  "C:/Users/asus/.gemini/antigravity/brain/3e4b1eee-c599-4e39-8db8-c1189d4781a8/backend_debug.log";
-
 const logToFile = (msg) => {
-  try {
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(DEBUG_LOG_PATH, `[${timestamp}] [AUTH] ${msg}\n`);
-  } catch (e) {}
+  // Suppress file logging in production/other environments
+  console.log(`[AUTH] ${msg}`);
 };
 
 const authenticate = async (req, res, next) => {

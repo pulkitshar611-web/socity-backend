@@ -8,6 +8,7 @@ class InvoiceController {
 
             const where = {
                 societyId,
+                ...(req.user.role === 'RESIDENT' ? { residentId: req.user.id } : {}),
                 ...(status && status !== 'all' ? { status: status.toUpperCase() } : {}),
                 ...(block && block !== 'all' ? { unit: { block } } : {}),
                 ...(search ? {
@@ -157,8 +158,15 @@ class InvoiceController {
 
     static async generateBills(req, res) {
         try {
-            const { month, dueDate, block, maintenanceAmount, utilityAmount, lateFee } = req.body;
+            const { month, dueDate, block } = req.body;
             const societyId = req.user.societyId;
+
+            // Fetch configs
+            const [maintenanceRules, activeCharges, lateFeeConfig] = await Promise.all([
+                prisma.maintenanceRule.findMany({ where: { societyId, isActive: true } }),
+                prisma.chargeMaster.findMany({ where: { societyId, isActive: true } }),
+                prisma.lateFeeConfig.findUnique({ where: { societyId } })
+            ]);
 
             // Fetch all units in the society/block
             const units = await prisma.unit.findMany({
@@ -168,29 +176,102 @@ class InvoiceController {
                 }
             });
 
-            const yearMonth = month.replace('-', ''); // jan-2025 -> jan2025
+            const yearMonth = month.replace('-', '');
             const createdInvoices = [];
 
             for (const unit of units) {
+                const invoiceItems = [];
+                let totalAmount = 0;
+                let maintenanceAmount = 0;
+
+                // 1. Calculate Maintenance based on rules
+                const rule = maintenanceRules.find(r => r.unitType === unit.type) || maintenanceRules.find(r => r.unitType === 'ALL');
+                if (rule) {
+                    if (rule.calculationType === 'FLAT') {
+                        maintenanceAmount = rule.amount;
+                    } else if (rule.calculationType === 'AREA') {
+                        maintenanceAmount = unit.areaSqFt * rule.ratePerSqFt;
+                    }
+
+                    if (maintenanceAmount > 0) {
+                        invoiceItems.push({
+                            name: `Maintenance Charges (${rule.calculationType === 'AREA' ? `${unit.areaSqFt} sq.ft @ ₹${rule.ratePerSqFt}` : 'Flat'})`,
+                            amount: maintenanceAmount
+                        });
+                        totalAmount += maintenanceAmount;
+                    }
+                }
+
+                // 2. Add Itemized Charges from ChargeMaster
+                activeCharges.forEach(charge => {
+                    if (charge.defaultAmount > 0) {
+                        invoiceItems.push({
+                            name: charge.name,
+                            amount: charge.defaultAmount
+                        });
+                        totalAmount += charge.defaultAmount;
+                    }
+                });
+
+                // 3. Calculate Overdue Penalty
+                let penaltyAmount = 0;
+                if (lateFeeConfig && lateFeeConfig.isActive) {
+                    const overdueInvoices = await prisma.invoice.findMany({
+                        where: {
+                            unitId: unit.id,
+                            status: 'OVERDUE'
+                        }
+                    });
+
+                    if (overdueInvoices.length > 0) {
+                        if (lateFeeConfig.feeType === 'FIXED') {
+                            penaltyAmount = lateFeeConfig.amount;
+                        } else if (lateFeeConfig.feeType === 'PERCENTAGE') {
+                            const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+                            penaltyAmount = (totalOverdue * lateFeeConfig.amount) / 100;
+                        }
+
+                        if (penaltyAmount > 0) {
+                            invoiceItems.push({
+                                name: `Late Fee Penalty (${lateFeeConfig.feeType})`,
+                                amount: penaltyAmount
+                            });
+                            totalAmount += penaltyAmount;
+                        }
+                    }
+                }
+
                 const invoiceNo = `INV-${yearMonth}-${unit.block}${unit.number}-${Date.now().toString().slice(-4)}`;
 
+                // Create Invoice with itemized items
                 const invoice = await prisma.invoice.create({
                     data: {
                         invoiceNo,
                         societyId,
                         unitId: unit.id,
                         residentId: unit.tenantId || unit.ownerId,
-                        amount: parseFloat(maintenanceAmount || 0) + parseFloat(utilityAmount || 0),
-                        maintenance: parseFloat(maintenanceAmount || 0),
-                        utilities: parseFloat(utilityAmount || 0),
+                        maintenance: maintenanceAmount,
+                        utilities: totalAmount - maintenanceAmount - penaltyAmount,
+                        penalty: penaltyAmount,
+                        amount: totalAmount,
                         dueDate: new Date(dueDate),
-                        status: 'PENDING'
+                        status: 'PENDING',
+                        description: `Automated itemized bill for ${month}`,
+                        items: {
+                            create: invoiceItems
+                        }
+                    },
+                    include: {
+                        items: true
                     }
                 });
                 createdInvoices.push(invoice);
             }
 
-            res.status(201).json({ message: `${createdInvoices.length} bills generated successfully`, count: createdInvoices.length });
+            res.status(201).json({
+                message: `${createdInvoices.length} itemized bills generated successfully`,
+                count: createdInvoices.length
+            });
         } catch (error) {
             console.error('Generate Bills Error:', error);
             res.status(500).json({ error: error.message });
@@ -215,6 +296,28 @@ class InvoiceController {
                 }
             });
 
+            // Create a SocietyReceipt
+            const receiptNo = `REC-${invoice.invoiceNo}`;
+            await prisma.societyReceipt.create({
+                data: {
+                    receiptNo,
+                    societyId: invoice.societyId,
+                    unitId: invoice.unitId,
+                    residentId: invoice.residentId,
+                    amount: invoice.amount,
+                    date: new Date(),
+                    paymentMethod: paymentMode || 'CASH',
+                    description: `Payment for Invoice ${invoice.invoiceNo}`,
+                    breakups: {
+                        create: {
+                            invoiceId: invoice.id,
+                            amount: invoice.amount,
+                            description: `Full payment for ${invoice.invoiceNo}`
+                        }
+                    }
+                }
+            });
+
             // Also record this as a transaction
             await prisma.transaction.create({
                 data: {
@@ -222,12 +325,12 @@ class InvoiceController {
                     category: 'Maintenance',
                     amount: invoice.amount,
                     date: new Date(),
-                    description: `Payment for Invoice ${invoiceNo}`,
+                    description: `Payment for Invoice ${invoice.invoiceNo}`,
                     paymentMethod: (paymentMode || 'CASH').toUpperCase(),
                     status: 'PAID',
                     societyId: invoice.societyId,
                     invoiceNo: invoice.invoiceNo,
-                    receivedFrom: invoice.residentId ? undefined : 'Resident' // We should ideally link user here but schema uses String
+                    receivedFrom: invoice.resident ? invoice.resident.name : 'Resident'
                 }
             });
 

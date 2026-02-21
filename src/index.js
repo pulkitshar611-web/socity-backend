@@ -36,6 +36,7 @@ const invoiceRoutes = require('./routes/invoice.routes');
 const moveRequestRoutes = require('./routes/moveRequest.routes');
 const facilityRequestRoutes = require('./routes/facilityRequest.routes');
 const tenantRoutes = require('./routes/tenant.routes');
+const rentalAgreementRoutes = require('./routes/rentalAgreement.routes');
 
 const http = require('http');
 const { initSocket } = require('./lib/socket');
@@ -114,6 +115,11 @@ app.use('/api/patrolling', require('./routes/patrolling.routes'));
 app.use('/api/guard', require('./routes/guard.routes'));
 app.use('/api/advertisements', require('./routes/advertisement.routes'));
 app.use('/api/community', require('./routes/community.routes'));
+app.use('/api/property-leads', require('./routes/propertyLead.routes'));
+app.use('/api/rental-agreements', rentalAgreementRoutes);
+app.use('/api/society-dues', require('./routes/societyReceipt.routes'));
+app.use('/api/billing-config', require('./routes/billingConfig.routes'));
+
 
 const fs = require('fs');
 const path = require('path');
@@ -121,7 +127,7 @@ const path = require('path');
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global Error Handler Caught:', err);
-  
+
   try {
     const log = `[${new Date().toISOString()}] Error: ${err.message}\nStack: ${err.stack}\n\n`;
     fs.appendFileSync(path.join(__dirname, '../crash.log'), log);
