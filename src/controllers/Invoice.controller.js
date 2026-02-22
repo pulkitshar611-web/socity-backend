@@ -24,7 +24,8 @@ class InvoiceController {
                 where,
                 include: {
                     unit: true,
-                    resident: { select: { name: true, phone: true } }
+                    resident: { select: { name: true, phone: true } },
+                    items: true
                 },
                 orderBy: { createdAt: 'desc' }
             });
@@ -49,7 +50,8 @@ class InvoiceController {
                 status: inv.status.toLowerCase(),
                 paidDate: inv.paidDate ? inv.paidDate.toISOString().split('T')[0] : null,
                 paymentMode: inv.paymentMode,
-                description: inv.description
+                description: inv.description,
+                items: inv.items
             })));
         } catch (error) {
             console.error('List Invoices Error:', error);
@@ -182,23 +184,33 @@ class InvoiceController {
             for (const unit of units) {
                 const invoiceItems = [];
                 let totalAmount = 0;
-                let maintenanceAmount = 0;
+                let maintenanceTotal = 0;
+                let utilitiesTotal = 0;
 
-                // 1. Calculate Maintenance based on rules
-                const rule = maintenanceRules.find(r => r.unitType === unit.type) || maintenanceRules.find(r => r.unitType === 'ALL');
-                if (rule) {
+                // 1. Calculate Maintenance based on ALL applicable rules
+                const applicableRules = maintenanceRules.filter(r =>
+                    r.unitType === unit.type || r.unitType === 'ALL'
+                );
+
+                for (const rule of applicableRules) {
+                    let amount = 0;
                     if (rule.calculationType === 'FLAT') {
-                        maintenanceAmount = rule.amount;
+                        amount = rule.amount;
                     } else if (rule.calculationType === 'AREA') {
-                        maintenanceAmount = unit.areaSqFt * rule.ratePerSqFt;
+                        amount = unit.areaSqFt * rule.ratePerSqFt;
                     }
 
-                    if (maintenanceAmount > 0) {
+                    if (amount > 0) {
+                        const ruleDescription = rule.calculationType === 'AREA'
+                            ? `${rule.unitType} Maintenance (${unit.areaSqFt} sq.ft @ ₹${rule.ratePerSqFt})`
+                            : `${rule.unitType} Maintenance (Flat)`;
+
                         invoiceItems.push({
-                            name: `Maintenance Charges (${rule.calculationType === 'AREA' ? `${unit.areaSqFt} sq.ft @ ₹${rule.ratePerSqFt}` : 'Flat'})`,
-                            amount: maintenanceAmount
+                            name: ruleDescription,
+                            amount: amount
                         });
-                        totalAmount += maintenanceAmount;
+                        maintenanceTotal += amount;
+                        totalAmount += amount;
                     }
                 }
 
@@ -209,6 +221,7 @@ class InvoiceController {
                             name: charge.name,
                             amount: charge.defaultAmount
                         });
+                        utilitiesTotal += charge.defaultAmount;
                         totalAmount += charge.defaultAmount;
                     }
                 });
@@ -250,8 +263,8 @@ class InvoiceController {
                         societyId,
                         unitId: unit.id,
                         residentId: unit.tenantId || unit.ownerId,
-                        maintenance: maintenanceAmount,
-                        utilities: totalAmount - maintenanceAmount - penaltyAmount,
+                        maintenance: maintenanceTotal,
+                        utilities: utilitiesTotal,
                         penalty: penaltyAmount,
                         amount: totalAmount,
                         dueDate: new Date(dueDate),
@@ -471,6 +484,57 @@ class InvoiceController {
                 criticalCases: 0 // Logic could be added here
             });
         } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async finalizeSetup(req, res) {
+        try {
+            const societyId = req.user.societyId;
+            const now = new Date();
+            const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+            const currentMonthStr = `${monthNames[now.getMonth()]}-${now.getFullYear()}`;
+
+            // Default due date to 10 days from now
+            const dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + 10);
+
+            console.log(`Finalizing setup for society ${societyId} and generating bills for ${currentMonthStr}`);
+
+            // We can reuse generateBills logic by mock-calling it or just implementing the core logic here
+            // For simplicity, let's just trigger the generateBills logic
+
+            // Check if bills already exist for this month to avoid duplicates
+            const yearMonth = currentMonthStr.split('-').reverse().join('');
+            const existing = await prisma.invoice.findFirst({
+                where: {
+                    societyId,
+                    invoiceNo: { contains: `INV-${yearMonth}` }
+                }
+            });
+
+            if (existing) {
+                return res.json({
+                    message: "Society billing setup finalized. Invoices for the current month already exist.",
+                    count: 0
+                });
+            }
+
+            // Redirect internal call to generateBills format
+            const mockReq = {
+                body: {
+                    month: currentMonthStr,
+                    dueDate: dueDate.toISOString().split('T')[0]
+                },
+                user: req.user
+            };
+
+            // Instead of redirecting, let's call the logic
+            // (In a real app, you might refactor the logic into a service)
+
+            return await InvoiceController.generateBills(mockReq, res);
+        } catch (error) {
+            console.error('Finalize Setup Error:', error);
             res.status(500).json({ error: error.message });
         }
     }

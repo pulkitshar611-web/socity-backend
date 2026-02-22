@@ -41,6 +41,7 @@ enum VisitorStatus {
   CHECKED_IN
   CHECKED_OUT
   REJECTED
+  EXITED
 }
 
 enum TransactionType {
@@ -143,6 +144,7 @@ model Society {
   chatGroups       ChatGroup[]
   propertyLeads    PropertyLead[]
   rentalAgreements RentalAgreementLead[]
+  gates            Gate[]
 
   maintenanceRules MaintenanceRule[]
   chargeMaster     ChargeMaster[]
@@ -454,15 +456,15 @@ model Visitor {
   purpose   String?
   photo     String?
 
-  status    String    @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED
+  status    String    @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED, EXITED
   entryTime DateTime?
   exitTime  DateTime?
 
   societyId Int
   society   Society @relation(fields: [societyId], references: [id])
 
-  visitingUnitId Int
-  unit           Unit @relation(fields: [visitingUnitId], references: [id])
+  visitingUnitId Int?
+  unit           Unit? @relation(fields: [visitingUnitId], references: [id])
 
   residentId Int?
   resident   User? @relation(fields: [residentId], references: [id])
@@ -473,10 +475,30 @@ model Visitor {
   idType   String? // Aadhar, DL
   idNumber String?
 
+  // QR Walk-in fields
+  gateId      Int?
+  gate        Gate?   @relation(fields: [gateId], references: [id])
+  fromLocation String?
+  whomToMeet   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("visitor")
+}
+
+model Gate {
+  id        Int      @id @default(autoincrement())
+  name      String   // e.g. "Main Gate", "Gate A", "Back Gate"
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visitors Visitor[]
+
+  @@map("gate")
 }
 
 model Transaction {

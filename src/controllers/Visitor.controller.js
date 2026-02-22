@@ -90,7 +90,8 @@ class VisitorController {
               tenant: true
             }
           },
-          resident: true
+          resident: true,
+          gate: { select: { id: true, name: true } }
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -118,7 +119,7 @@ class VisitorController {
         ? { OR: [{ checkedInById: req.user.id }, { checkedInById: null, status: { in: ['PENDING', 'APPROVED', 'PRE_APPROVED'] } }] }
         : {};
 
-      const [totalToday, activeNow, preApproved, totalMonth] = await Promise.all([
+      const [totalToday, activeNow, preApproved, totalMonth, pendingApprovals, vehiclesIn] = await Promise.all([
         prisma.visitor.count({
           where: {
             societyId,
@@ -147,14 +148,36 @@ class VisitorController {
             createdAt: { gte: firstDayOfMonth },
             ...guardScope
           }
+        }),
+        prisma.visitor.count({
+          where: {
+            societyId,
+            status: 'PENDING',
+            ...guardScope
+          }
+        }),
+        prisma.visitor.count({
+          where: {
+            societyId,
+            status: 'CHECKED_IN',
+            vehicleNo: { not: null, not: '' },
+            ...guardScope
+          }
         })
       ]);
 
       res.json({
+        // Fields for Visitors Page
         totalToday,
         activeNow,
         preApproved,
-        totalMonth
+        totalMonth,
+
+        // Fields for Guard Dashboard
+        visitorsToday: totalToday,
+        pendingApprovals,
+        vehiclesIn,
+        parcelsToDeliver: 0 // Placeholder
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -307,6 +330,10 @@ class VisitorController {
       if ((req.user.role || '').toUpperCase() === 'GUARD' && (newStatus === 'CHECKED_IN' || newStatus === 'APPROVED')) {
         updateData.checkedInById = req.user.id;
         if (newStatus === 'CHECKED_IN') updateData.entryTime = new Date();
+      }
+      // When status changes to EXITED, record exit time
+      if (newStatus === 'EXITED') {
+        updateData.exitTime = new Date();
       }
       const visitor = await prisma.visitor.update({
         where: { id: parseInt(id) },

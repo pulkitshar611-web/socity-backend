@@ -9,6 +9,7 @@ router.get('/defaulters', authenticate, authorize(['ADMIN', 'ACCOUNTANT']), Invo
 router.get('/defaulters/stats', authenticate, authorize(['ADMIN', 'ACCOUNTANT']), InvoiceController.getDefaulterStats);
 router.post('/', authenticate, authorize(['ADMIN']), InvoiceController.create);
 router.post('/generate', authenticate, authorize(['ADMIN']), InvoiceController.generateBills);
+router.post('/finalize', authenticate, authorize(['ADMIN']), InvoiceController.finalizeSetup);
 router.patch('/:invoiceNo/pay', authenticate, authorize(['ADMIN', 'ACCOUNTANT']), InvoiceController.markAsPaid);
 
 module.exports = router;

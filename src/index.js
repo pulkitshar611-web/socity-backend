@@ -119,6 +119,7 @@ app.use('/api/property-leads', require('./routes/propertyLead.routes'));
 app.use('/api/rental-agreements', rentalAgreementRoutes);
 app.use('/api/society-dues', require('./routes/societyReceipt.routes'));
 app.use('/api/billing-config', require('./routes/billingConfig.routes'));
+app.use('/api/gates', require('./routes/gate.routes'));
 
 
 const fs = require('fs');
