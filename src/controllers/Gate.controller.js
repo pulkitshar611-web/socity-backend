@@ -181,8 +181,55 @@ class GateController {
                     gateId: gate.id,
                     visitingUnitId: visitingUnitId ? parseInt(visitingUnitId) : null,
                     residentId
+                },
+                include: {
+                    unit: true,
+                    gate: true
                 }
             });
+
+            // Notify guards via Socket.io
+            try {
+                const { getIO } = require('../lib/socket');
+                const io = getIO();
+
+                const notificationData = {
+                    id: visitor.id,
+                    name: visitor.name,
+                    purpose: visitor.purpose,
+                    gateName: gate.name,
+                    unit: visitor.unit ? `${visitor.unit.block}-${visitor.unit.number}` : null
+                };
+
+                io.to(`society_${gate.societyId}`).emit('new_visitor_request', notificationData);
+
+                // ALSO: Save to Database Notifications for Persistent Dropdown
+                const staffToNotify = await prisma.user.findMany({
+                    where: {
+                        societyId: gate.societyId,
+                        role: { in: ['GUARD', 'ADMIN', 'COMMUNITY_MANAGER'] },
+                        status: 'ACTIVE'
+                    },
+                    select: { id: true, role: true, name: true }
+                });
+
+                console.log(`[Notification] Found ${staffToNotify.length} staff members to notify for society ${gate.societyId}`);
+
+                if (staffToNotify.length > 0) {
+                    const result = await prisma.notification.createMany({
+                        data: staffToNotify.map(staff => ({
+                            userId: staff.id,
+                            title: 'New Visitor Request',
+                            description: `${visitor.name} at ${gate.name} for ${visitor.purpose}`,
+                            type: 'visitor',
+                            metadata: { visitorId: visitor.id, gateId: gate.id }
+                        }))
+                    });
+                    console.log(`[Notification] Successfully created ${result.count} notification records.`);
+                }
+            } catch (err) {
+                console.error('Notification workflow failed:', err.message);
+            }
 
             res.status(201).json({
                 message: 'Entry request submitted. Please wait for security approval.',

@@ -16,30 +16,28 @@ const initSocket = (server) => {
 
     // Join a room based on societyId to scope alerts
     socket.on('join-society', (societyId) => {
-      socket.join(`society_${societyId}`);
-      console.log(`Socket ${socket.id} joined society_${societyId}`);
+      const room = `society_${societyId}`;
+      socket.join(room);
+      console.log(`[Socket] Client ${socket.id} joined room: ${room}`);
     });
 
     socket.on('join-platform-admin', () => {
       socket.join('platform_admin');
-      console.log(`Socket ${socket.id} joined platform_admin`);
-    });
-
-    socket.on('join-conversation', (conversationId) => {
-      socket.join(`conversation_${conversationId}`);
-      console.log(`Socket ${socket.id} joined conversation_${conversationId}`);
+      console.log(`[Socket] Client ${socket.id} joined room: platform_admin`);
     });
 
     socket.on('join-user', (userId) => {
       if (userId) {
-        socket.join(`user_${userId}`);
-        console.log(`Socket ${socket.id} joined user_${userId}`);
+        const room = `user_${userId}`;
+        socket.join(room);
+        console.log(`[Socket] Client ${socket.id} joined room: ${room}`);
       }
     });
 
-    socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+      console.log(`[Socket] User disconnected: ${socket.id} (Reason: ${reason})`);
     });
+
   });
 
   return io;

@@ -190,7 +190,7 @@ class VisitorController {
       if (!societyId) {
         return res.status(403).json({ error: 'Visitor check-in is only for society-scoped users' });
       }
-      const { name, phone, visitingUnitId, purpose, vehicleNo, idType, idNumber } = req.body;
+      const { name, phone, visitingUnitId, purpose, whomToMeet, vehicleNo, idType, idNumber } = req.body;
       let photoUrl = null;
 
       // Handle Photo Upload
@@ -224,6 +224,7 @@ class VisitorController {
           visitingUnitId: parseInt(visitingUnitId),
           residentId,
           purpose,
+          whomToMeet,
           vehicleNo,
           idType,
           idNumber,
@@ -247,7 +248,7 @@ class VisitorController {
       if (!societyId) {
         return res.status(403).json({ error: 'Pre-approval is only for society-scoped users' });
       }
-      const { name, phone, purpose, visitingUnitId, vehicleNo } = req.body;
+      const { name, phone, purpose, whomToMeet, visitingUnitId, vehicleNo } = req.body;
       let photoUrl = null;
 
       if (req.file) {
@@ -279,6 +280,7 @@ class VisitorController {
           name,
           phone,
           purpose,
+          whomToMeet,
           vehicleNo,
           visitingUnitId: unitId ? parseInt(unitId) : null,
           residentId: req.user.role === 'RESIDENT' ? req.user.id : null,
@@ -337,8 +339,32 @@ class VisitorController {
       }
       const visitor = await prisma.visitor.update({
         where: { id: parseInt(id) },
-        data: updateData
+        data: updateData,
+        include: { society: { select: { name: true } } }
       });
+
+      // Notify relevant parties
+      try {
+        const { getIO } = require('../lib/socket');
+        const io = getIO();
+
+        // Notify society admins/guards
+        io.to(`society_${visitor.societyId}`).emit('visitor_updated', visitor);
+
+        // Notify the specific visitor (if they are on the visitor-entry page)
+        // Using 'user_' prefix to match the join-user logic in socket.js
+        io.to(`user_visitor_${visitor.id}`).emit('visitor_status_updated', {
+          id: visitor.id,
+          status: visitor.status,
+          message: visitor.status === 'APPROVED' ? 'Your entry has been approved!' :
+            visitor.status === 'CHECKED_IN' ? 'You have been checked in.' :
+              visitor.status === 'REJECTED' ? 'Your entry request was rejected.' :
+                `Status updated to ${visitor.status}`
+        });
+      } catch (err) {
+        console.error('Socket notification failed:', err.message);
+      }
+
       res.json(visitor);
     } catch (error) {
       res.status(500).json({ error: error.message });
