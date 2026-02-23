@@ -41,7 +41,6 @@ enum VisitorStatus {
   CHECKED_IN
   CHECKED_OUT
   REJECTED
-  EXITED
 }
 
 enum TransactionType {
@@ -98,7 +97,8 @@ model Society {
   expectedUnits    Int              @default(0)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
-  createdByUserId  Int? // Super Admin who created this society – chat allowed only with this society's admins
+  gates            Gate[]
+  createdByUserId  Int?             // Super Admin who created this society – chat allowed only with this society's admins
   createdByUser    User?            @relation("SocietyCreatedBy", fields: [createdByUserId], references: [id])
 
   users             User[]
@@ -132,7 +132,6 @@ model Society {
   purchaseOrders    PurchaseOrder[]
   goodsReceipts     GoodsReceipt[]
   ledgerAccounts    LedgerAccount[]
-  societyReceipts   SocietyReceipt[]
 
   journalEntries   JournalEntry[]
   unitVehicles     UnitVehicle[]
@@ -142,10 +141,6 @@ model Society {
   facilityRequests FacilityRequest[]
   communityChats   CommunityChat[]
   chatGroups       ChatGroup[]
-  propertyLeads    PropertyLead[]
-  rentalAgreements RentalAgreementLead[]
-  gates            Gate[]
-
   maintenanceRules MaintenanceRule[]
   chargeMaster     ChargeMaster[]
   lateFeeConfig    LateFeeConfig?
@@ -174,7 +169,7 @@ model User {
   pinCode          String?
   assignedVendorId Int?
   assignedVendor   Vendor? @relation("VendorAssignments", fields: [assignedVendorId], references: [id])
-  addedByUserId    Int? // User who added/created this user (Individual can only chat with Super Admin + this user)
+  addedByUserId    Int?    // User who added/created this user (Individual can only chat with Super Admin + this user)
   addedByUser      User?   @relation("UserAddedBy", fields: [addedByUserId], references: [id])
 
   // Relations
@@ -194,8 +189,8 @@ model User {
   conversations       Conversation[]     @relation("UserConversations")
   directConversations Conversation[]     @relation("DirectConversations")
   sentMessages        ChatMessage[]      @relation("SentMessages")
-  buzzs               CommunityBuzz[]
-  communityComments   CommunityComment[]
+  buzzs             CommunityBuzz[]
+  communityComments CommunityComment[]
 
   sosAlerts         SOSAlert[]
   emergencyContacts EmergencyContact[]
@@ -207,31 +202,24 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  buzzLikes           BuzzLike[]
-  visitors            Visitor[]
-  checkedInVisitors   Visitor[]  @relation("VisitorCheckedInBy")
-  loggedParcels       Parcel[]   @relation("ParcelLoggedBy")
-  staffCreatedByGuard Staff[]    @relation("StaffCreatedByGuard")
-  societiesCreated    Society[]  @relation("SocietyCreatedBy")
-  usersAdded          User[]     @relation("UserAddedBy")
+  buzzLikes BuzzLike[]
+  visitors  Visitor[]
+  checkedInVisitors Visitor[] @relation("VisitorCheckedInBy")
+  loggedParcels     Parcel[]   @relation("ParcelLoggedBy")
+  staffCreatedByGuard Staff[]  @relation("StaffCreatedByGuard")
+  societiesCreated    Society[] @relation("SocietyCreatedBy")
+  usersAdded          User[]    @relation("UserAddedBy")
 
   // Security Relations
-  reportedIncidents        Incident[]            @relation("ReportedIncidents")
-  assignedIncidents        Incident[]            @relation("AssignedIncidents")
-  patrolLogs               PatrolLog[]           @relation("GuardPatrols")
-  parkingPayments          ParkingPayment[]
-  communityChats           CommunityChat[]
-  createdGroups            ChatGroup[]           @relation("GroupCreator")
-  groupMemberships         GroupMember[]
-  groupMessages            GroupMessage[]
-  notifications            Notification[]
-  propertyLeads            PropertyLead[]        @relation("ResidentLeads")
-  assignedLeads            PropertyLead[]        @relation("AssignedLeads")
-  rentalAgreements         RentalAgreementLead[] @relation("ResidentRentalAgreements")
-  assignedRentalAgreements RentalAgreementLead[] @relation("AssignedRentalAgreements")
-
-  societyReceipts      SocietyReceipt[]
-  reversedTransactions ReversalTransaction[] @relation("ReversalProcessedBy")
+  reportedIncidents Incident[]       @relation("ReportedIncidents")
+  assignedIncidents Incident[]       @relation("AssignedIncidents")
+  patrolLogs        PatrolLog[]      @relation("GuardPatrols")
+  parkingPayments   ParkingPayment[]
+  communityChats    CommunityChat[]
+  createdGroups     ChatGroup[]      @relation("GroupCreator")
+  groupMemberships  GroupMember[]
+  groupMessages     GroupMessage[]
+  notifications     Notification[]
 
   @@map("user")
 }
@@ -242,7 +230,7 @@ model Notification {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
   description String?  @db.Text
-  type        String? // visitor, payment, complaint, booking, lead_assigned, etc.
+  type        String?  // visitor, payment, complaint, booking, lead_assigned, etc.
   read        Boolean  @default(false)
   metadata    Json?
   createdAt   DateTime @default(now())
@@ -339,9 +327,6 @@ model Unit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  wallet          Wallet?
-  societyReceipts SocietyReceipt[]
-
   @@unique([societyId, block, number])
   @@map("unit")
 }
@@ -409,8 +394,8 @@ model Complaint {
   priority    Priority        @default(MEDIUM)
   status      ComplaintStatus @default(OPEN)
 
-  isPrivate             Boolean @default(false)
-  escalatedToTech       Boolean @default(false)
+  isPrivate            Boolean @default(false)
+  escalatedToTech      Boolean @default(false)
   escalatedToSuperAdmin Boolean @default(false)
 
   images Json? // Array of image URLs
@@ -455,50 +440,35 @@ model Visitor {
   vehicleNo String?
   purpose   String?
   photo     String?
+  whomToMeet String?
+  fromLocation String?
 
-  status    String    @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED, EXITED
+  status    String    @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED
   entryTime DateTime?
   exitTime  DateTime?
 
   societyId Int
   society   Society @relation(fields: [societyId], references: [id])
 
-  visitingUnitId Int?
-  unit           Unit? @relation(fields: [visitingUnitId], references: [id])
+  visitingUnitId Int
+  unit           Unit @relation(fields: [visitingUnitId], references: [id])
 
   residentId Int?
   resident   User? @relation(fields: [residentId], references: [id])
 
-  checkedInById Int? // Guard who checked in / approved this visitor
+  checkedInById Int?  // Guard who checked in / approved this visitor
   checkedInBy   User? @relation("VisitorCheckedInBy", fields: [checkedInById], references: [id])
 
   idType   String? // Aadhar, DL
   idNumber String?
 
-  // QR Walk-in fields
-  gateId      Int?
-  gate        Gate?   @relation(fields: [gateId], references: [id])
-  fromLocation String?
-  whomToMeet   String?
+  gateId Int?
+  gate   Gate? @relation(fields: [gateId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("visitor")
-}
-
-model Gate {
-  id        Int      @id @default(autoincrement())
-  name      String   // e.g. "Main Gate", "Gate A", "Back Gate"
-  societyId Int
-  society   Society  @relation(fields: [societyId], references: [id])
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  visitors Visitor[]
-
-  @@map("gate")
 }
 
 model Transaction {
@@ -553,20 +523,21 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  receiptBreakups ReceiptBreakup[]
-  items           InvoiceItem[]
+  items InvoiceItem[]
 
   @@map("invoice")
 }
 
 model InvoiceItem {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   invoiceId Int
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  name      String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  name      String   // Water, Electricity, Cleaning, etc.
   amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@map("invoice_item")
+  @@map("invoiceitem")
 }
 
 model Vendor {
@@ -602,9 +573,9 @@ model Vendor {
 
   servicePincodes String? @db.Text // Comma-separated list of pincodes
 
-  createdAt         DateTime         @default(now())
-  serviceInquiries  ServiceInquiry[]
-  assignedResidents User[]           @relation("VendorAssignments")
+  createdAt        DateTime         @default(now())
+  serviceInquiries ServiceInquiry[]
+  assignedResidents User[] @relation("VendorAssignments")
 
   @@map("vendor")
 }
@@ -801,15 +772,15 @@ model SystemSetting {
 }
 
 model BillingPlan {
-  id          Int              @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   name        String
   type        String // Monthly, Quarterly, Yearly, One-Time
   planType    SubscriptionPlan @default(BASIC)
   price       String
-  description String?          @db.Text
-  status      String           @default("active") // active, inactive
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  description String?  @db.Text
+  status      String   @default("active") // active, inactive
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   societies   Society[]
 
   @@map("billingplan")
@@ -995,15 +966,15 @@ model Meeting {
 }
 
 model CommunityGuideline {
-  id             Int      @id @default(autoincrement())
-  societyId      Int?
-  society        Society? @relation(fields: [societyId], references: [id])
-  title          String
-  content        String   @db.Text
-  category       String // SOCIETY, SECURITY, AMENITIES
-  targetAudience String?  @default("ALL") // ALL, RESIDENTS, ADMINS, INDIVIDUALS, VENDORS
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  societyId       Int?
+  society         Society? @relation(fields: [societyId], references: [id])
+  title           String
+  content         String   @db.Text
+  category        String   // SOCIETY, SECURITY, AMENITIES
+  targetAudience  String?  @default("ALL") // ALL, RESIDENTS, ADMINS, INDIVIDUALS, VENDORS
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("communityguideline")
 }
@@ -1039,21 +1010,21 @@ model Document {
 }
 
 model Parcel {
-  id              Int       @id @default(autoincrement())
-  unitId          Int
-  unit            Unit      @relation(fields: [unitId], references: [id])
-  courierName     String
-  trackingNumber  String?
-  description     String?
-  receivedBy      String?
-  status          String    @default("PENDING") // PENDING, COLLECTED
-  collectedBy     String?
-  collectedAt     DateTime?
-  societyId       Int
-  society         Society   @relation(fields: [societyId], references: [id])
-  loggedByGuardId Int? // Guard who logged this parcel at gate
+  id             Int       @id @default(autoincrement())
+  unitId         Int
+  unit           Unit      @relation(fields: [unitId], references: [id])
+  courierName    String
+  trackingNumber String?
+  description    String?
+  receivedBy     String?
+  status         String    @default("PENDING") // PENDING, COLLECTED
+  collectedBy    String?
+  collectedAt    DateTime?
+  societyId      Int
+  society        Society   @relation(fields: [societyId], references: [id])
+  loggedByGuardId Int?      // Guard who logged this parcel at gate
   loggedByGuard   User?     @relation("ParcelLoggedBy", fields: [loggedByGuardId], references: [id])
-  createdAt       DateTime  @default(now())
+  createdAt      DateTime  @default(now())
 
   @@map("parcel")
 }
@@ -1136,10 +1107,10 @@ model Conversation {
   societyId Int
   society   Society @relation(fields: [societyId], references: [id])
 
-  type                String // DIRECT, SUPPORT_ADMIN, SUPPORT_MAINTENANCE, etc.
-  participantId       Int? // One user in the chat
-  participant         User?  @relation("UserConversations", fields: [participantId], references: [id])
-  directParticipantId Int? // Second user for DIRECT 1-to-1 chats
+  type          String // DIRECT, SUPPORT_ADMIN, SUPPORT_MAINTENANCE, etc.
+  participantId Int?   // One user in the chat
+  participant   User?  @relation("UserConversations", fields: [participantId], references: [id])
+  directParticipantId Int?   // Second user for DIRECT 1-to-1 chats
   directParticipant   User?  @relation("DirectConversations", fields: [directParticipantId], references: [id])
 
   messages  ChatMessage[]
@@ -1218,18 +1189,18 @@ model ServiceInquiry {
   vendor     Vendor? @relation(fields: [vendorId], references: [id]) // Add relation if missing
 
   // Payment (visible only when status = CONFIRMED)
-  paymentStatus String?   @default("PENDING") // PENDING, PAID, FAILED
-  payableAmount Float?
-  paymentMethod String? // UPI, CARD, NET_BANKING, WALLET, CASH
-  transactionId String?
-  paymentDate   DateTime?
-
-  vendorPrice Float? // Amount agreed to pay the vendor (hidden from user)
+  paymentStatus   String?   @default("PENDING") // PENDING, PAID, FAILED
+  payableAmount   Float?
+  paymentMethod   String?   // UPI, CARD, NET_BANKING, WALLET, CASH
+  transactionId   String?
+  paymentDate     DateTime?
+  
+  vendorPrice     Float?    // Amount agreed to pay the vendor (hidden from user)
 
   // Vendor contacted customer (CONTACT button in Vendor Dashboard)
-  contactedAt DateTime?
-  contactedBy Int? // Vendor id who marked as contacted
-  activityLog Json? // Array of { action, time, byVendorId? } for timeline
+  contactedAt   DateTime?
+  contactedBy   Int?      // Vendor id who marked as contacted
+  activityLog   Json?     // Array of { action, time, byVendorId? } for timeline
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1443,7 +1414,7 @@ model Staff {
   societyId Int
   society   Society @relation(fields: [societyId], references: [id])
 
-  createdByGuardId Int? // Guard who created this helper (staff) – guard sees only own
+  createdByGuardId Int?  // Guard who created this helper (staff) – guard sees only own
   createdByGuard   User? @relation("StaffCreatedByGuard", fields: [createdByGuardId], references: [id])
 
   createdAt DateTime @default(now())
@@ -1530,19 +1501,19 @@ model FacilityRequest {
 }
 
 model Advertisement {
-  id             Int       @id @default(autoincrement())
-  title          String
-  content        String    @db.Text
-  imageUrl       String?
-  linkUrl        String? // Optional link to external site or internal page
-  isActive       Boolean   @default(true)
-  type           String    @default("BANNER") // BANNER, CARD, POPUP
-  targetAudience String?   @default("ALL") // ALL, RESIDENTS, ADMINS, INDIVIDUALS, VENDORS
-  displayOrder   Int       @default(0)
-  startDate      DateTime?
-  endDate        DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              Int      @id @default(autoincrement())
+  title           String
+  content         String   @db.Text
+  imageUrl        String?
+  linkUrl         String?  // Optional link to external site or internal page
+  isActive        Boolean  @default(true)
+  type            String   @default("BANNER") // BANNER, CARD, POPUP
+  targetAudience  String?  @default("ALL") // ALL, RESIDENTS, ADMINS, INDIVIDUALS, VENDORS
+  displayOrder    Int      @default(0)
+  startDate       DateTime?
+  endDate         DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("advertisement")
 }
@@ -1579,13 +1550,13 @@ model ChatGroup {
 }
 
 model GroupMember {
-  id       Int       @id @default(autoincrement())
-  groupId  Int
-  group    ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userId   Int
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role     String    @default("MEMBER") // ADMIN, MEMBER
-  joinedAt DateTime  @default(now())
+  id        Int       @id @default(autoincrement())
+  groupId   Int
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String    @default("MEMBER") // ADMIN, MEMBER
+  joinedAt  DateTime  @default(now())
 
   @@unique([groupId, userId])
   @@index([userId])
@@ -1606,296 +1577,65 @@ model GroupMessage {
   @@map("groupmessage")
 }
 
-// ==================== PROPERTY LEADS MODELS ====================
-
-model PropertyLead {
-  id          Int     @id @default(autoincrement())
-  title       String
-  description String? @db.Text
-  category    String // Flat, Shop, PG, Land, Gala, Investment Property
-  actionType  String // Buy, Sell, Rent, Investment
-
-  // Location Details
-  city    String
-  area    String
-  address String? @db.Text
-
-  // Property Details
-  size     Float? // Area in sq ft / sq yard
-  budget   Float? // Expected Price
-  bedrooms Int?
-  floor    Int?
-
-  // Contact Details
-  residentName String
-  phone        String
-  email        String?
-
-  status String @default("New Lead") // New Lead, Contacted, Closed
-
-  assignedToId Int?
-  assignedTo   User? @relation("AssignedLeads", fields: [assignedToId], references: [id])
-
-  residentId Int
-  resident   User @relation("ResidentLeads", fields: [residentId], references: [id])
-
-  societyId Int?
-  society   Society? @relation(fields: [societyId], references: [id])
-
-  media   PropertyMedia[]
-  history LeadStatusHistory[]
-
+model Gate {
+  id        Int      @id @default(autoincrement())
+  name      String
+  isActive  Boolean  @default(true)
+  
+  societyId Int
+  society   Society  @relation(fields: [societyId], references: [id])
+  
+  visitors  Visitor[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("propertylead")
-}
-
-model PropertyMedia {
-  id        Int          @id @default(autoincrement())
-  leadId    Int
-  lead      PropertyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  url       String
-  type      String       @default("image") // image, video
-  createdAt DateTime     @default(now())
-
-  @@map("propertymedia")
-}
-
-model LeadStatusHistory {
-  id          Int          @id @default(autoincrement())
-  leadId      Int
-  lead        PropertyLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  status      String
-  notes       String?      @db.Text
-  updatedById Int
-  createdAt   DateTime     @default(now())
-
-  @@map("leadstatushistory")
-}
-
-// ==================== RENTAL AGREEMENT MODELS ====================
-
-model RentalAgreementLead {
-  id Int @id @default(autoincrement())
-
-  // Applicant Details
-  residentName String
-  phone        String
-  email        String?
-
-  // Property Details
-  propertyType    String // Flat, Shop, PG, Office, Other
-  propertyAddress String @db.Text
-  city            String
-  area            String
-
-  // Agreement Details
-  agreementType  String // New, Renewal
-  rentAmount     Float
-  depositAmount  Float
-  durationMonths Int
-  startDate      DateTime
-
-  // Owner & Tenant Details
-  ownerName       String
-  tenantName      String
-  numberOfTenants Int
-
-  // Additional Information
-  remarks String? @db.Text
-  status  String  @default("New") // New, Processing, Completed, Rejected
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  residentId   Int
-  resident     User     @relation("ResidentRentalAgreements", fields: [residentId], references: [id])
-  societyId    Int?
-  society      Society? @relation(fields: [societyId], references: [id])
-  assignedToId Int?
-  assignedTo   User?    @relation("AssignedRentalAgreements", fields: [assignedToId], references: [id])
-
-  documents RentalAgreementDocument[]
-  history   RentalAgreementStatusHistory[]
-
-  @@index([residentId])
-  @@index([societyId])
-  @@map("rentalagreementlead")
-}
-
-model RentalAgreementDocument {
-  id        Int                 @id @default(autoincrement())
-  leadId    Int
-  lead      RentalAgreementLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  url       String
-  name      String? // Original filename or title
-  type      String              @default("image") // image, pdf, etc.
-  createdAt DateTime            @default(now())
-
-  @@map("rentalagreementdocument")
-}
-
-model RentalAgreementStatusHistory {
-  id          Int                 @id @default(autoincrement())
-  leadId      Int
-  lead        RentalAgreementLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  status      String
-  notes       String?             @db.Text
-  updatedById Int
-  createdAt   DateTime            @default(now())
-
-  @@map("rentalagreementstatushistory")
-}
-
-// ==================== SOCIETY DUES & WALLET MODELS ====================
-
-model Wallet {
-  id           Int      @id @default(autoincrement())
-  unitId       Int      @unique
-  unit         Unit     @relation(fields: [unitId], references: [id])
-  
-  advanceBalance        Float @default(0)
-  securityDepositBalance Float @default(0)
-  
-  transactions WalletTransaction[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@map("wallet")
-}
-
-model WalletTransaction {
-  id          Int      @id @default(autoincrement())
-  walletId    Int
-  wallet      Wallet   @relation(fields: [walletId], references: [id])
-  
-  type        String   // CREDIT, DEBIT
-  purpose     String   // ADVANCE, SECURITY_DEPOSIT, MAINTENANCE_ADJUSTMENT, REVERSAL
-  amount      Float
-  date        DateTime @default(now())
-  description String?
-  
-  receiptId   Int?     
-  receipt     SocietyReceipt? @relation(fields: [receiptId], references: [id])
-  
-  reversalId  Int?     @unique
-  reversal    ReversalTransaction? @relation("WalletReversal", fields: [reversalId], references: [id])
-
-  createdAt   DateTime @default(now())
-  
-  @@map("wallettransaction")
-}
-
-model SocietyReceipt {
-  id          Int      @id @default(autoincrement())
-  receiptNo   String   @unique // e.g., REC-2025-001
-  
-  societyId   Int
-  society     Society  @relation(fields: [societyId], references: [id])
-  
-  unitId      Int
-  unit        Unit     @relation(fields: [unitId], references: [id])
-  
-  residentId  Int
-  resident    User     @relation(fields: [residentId], references: [id])
-  
-  amount      Float
-  date        DateTime @default(now())
-  
-  paymentMethod String
-  transactionId String?  // External payment Gateway ID or Cheque No
-  description   String?
-  
-  breakups    ReceiptBreakup[]
-  walletTransactions WalletTransaction[]
-  
-  reversalId  Int?     @unique
-  reversal    ReversalTransaction? @relation("ReceiptReversal", fields: [reversalId], references: [id])
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("societyreceipt")
-}
-
-model ReceiptBreakup {
-  id          Int      @id @default(autoincrement())
-  receiptId   Int
-  receipt     SocietyReceipt @relation(fields: [receiptId], references: [id])
-  
-  invoiceId   Int?
-  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
-  
-  amount      Float
-  description String? // e.g., "Partial payment for Maintenance"
-
-  @@map("receiptbreakup")
-}
-
-model ReversalTransaction {
-  id          Int      @id @default(autoincrement())
-  reason      String
-  amount      Float
-  date        DateTime @default(now())
-  
-  originalReceiptId Int? @unique
-  originalReceipt   SocietyReceipt? @relation("ReceiptReversal")
-  
-  originalWalletTxId Int? @unique
-  originalWalletTx   WalletTransaction? @relation("WalletReversal")
-
-  reversedById Int
-  reversedBy   User @relation("ReversalProcessedBy", fields: [reversedById], references: [id])
-
-  createdAt   DateTime @default(now())
-  
-  @@map("reversaltransaction")
+  @@map("gate")
 }
 
 model MaintenanceRule {
   id              Int      @id @default(autoincrement())
   societyId       Int
   society         Society  @relation(fields: [societyId], references: [id])
-  unitType        String   @default("ALL") // 1BHK, 2BHK, ALL
-  calculationType String   @default("FLAT") // FLAT, AREA
+  unitType        String   // e.g. "2BHK", "3BHK", "ALL"
+  calculationType String   @default("FLAT") // FLAT | AREA
   amount          Float    @default(0)
   ratePerSqFt     Float    @default(0)
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@unique([societyId, unitType])
   @@map("maintenancerule")
 }
 
 model ChargeMaster {
   id                Int      @id @default(autoincrement())
   societyId         Int
-  society         Society  @relation(fields: [societyId], references: [id])
+  society           Society  @relation(fields: [societyId], references: [id])
   name              String
   defaultAmount     Float    @default(0)
-  calculationMethod String   @default("FIXED") // FIXED, VARIABLE
+  calculationMethod String   @default("FIXED") // FIXED | VARIABLE
   isOptional        Boolean  @default(false)
   isActive          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@map("chargemaster")
 }
 
 model LateFeeConfig {
-  id             Int      @id @default(autoincrement())
-  societyId      Int      @unique
-  society        Society  @relation(fields: [societyId], references: [id])
-  gracePeriod    Int      @default(0) // Days
-  feeType        String   @default("FIXED") // FIXED, PERCENTAGE, PER_DAY
-  amount         Float    @default(0)
-  maxCap         Float?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  societyId   Int      @unique
+  society     Society  @relation(fields: [societyId], references: [id])
+  gracePeriod Int      @default(5)    // days
+  feeType     String   @default("FIXED") // FIXED | PERCENTAGE | PER_DAY
+  amount      Float    @default(0)
+  maxCap      Float?
+  isActive    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@map("latefeeconfig")
+  @@map("latefeeconfigmodel")
 }
+

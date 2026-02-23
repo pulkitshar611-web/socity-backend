@@ -48,35 +48,65 @@ class PlatformInvoiceController {
   static async bulkCreateInvoices(req, res) {
     try {
       const activeSocieties = await prisma.society.findMany({
-        where: { status: 'ACTIVE' }
+        where: { status: 'ACTIVE' },
+        include: { billingPlan: true }
       });
 
-      const planPrices = {
-        BASIC: 10000,
-        PROFESSIONAL: 20000,
-        ENTERPRISE: 75000
-      };
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-      const createdInvoices = await Promise.all(
-        activeSocieties.map(async (society) => {
-          const amount = planPrices[society.subscriptionPlan] || 10000;
-          return prisma.platformInvoice.create({
-            data: {
-              societyId: society.id,
-              amount: amount,
-              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-              invoiceNo: `INV-${society.id}-${Date.now().toString().slice(-6)}`,
-              status: 'PENDING'
+      const createdInvoices = [];
+      const skippedSocieties = [];
+
+      for (const society of activeSocieties) {
+        // 1. Check if invoice already exists for this month
+        const existingInvoice = await prisma.platformInvoice.findFirst({
+          where: {
+            societyId: society.id,
+            createdAt: {
+              gte: firstDayOfMonth,
+              lte: lastDayOfMonth
             }
-          });
-        })
-      );
+          }
+        });
+
+        if (existingInvoice) {
+          skippedSocieties.push(society.name);
+          continue;
+        }
+
+        // 2. Calculate dynamic amount
+        const planPrice = parseFloat(society.billingPlan?.price || 0);
+        const discount = society.discount || 0;
+        const finalAmount = Math.round(planPrice * (1 - discount / 100));
+
+        if (finalAmount <= 0) {
+          console.log(`Skipping society ${society.name} due to zero amount`);
+          continue;
+        }
+
+        // 3. Create invoice
+        const invoice = await prisma.platformInvoice.create({
+          data: {
+            societyId: society.id,
+            amount: finalAmount,
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+            invoiceNo: `INV-${society.id}-${Date.now().toString().slice(-6)}`,
+            status: 'PENDING'
+          }
+        });
+        createdInvoices.push(invoice);
+      }
 
       res.status(201).json({ 
-        message: `${createdInvoices.length} invoices generated successfully`,
-        count: createdInvoices.length 
+        message: `${createdInvoices.length} invoices generated successfully.`,
+        count: createdInvoices.length,
+        skipped: skippedSocieties.length,
+        skippedNames: skippedSocieties
       });
     } catch (error) {
+      console.error('Bulk Invoice Generation Error:', error);
       res.status(500).json({ error: error.message });
     }
   }

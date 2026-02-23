@@ -8,6 +8,9 @@ router.use(authenticate);
 // List all vehicles
 router.get('/', VehicleController.getAll);
 
+// Search vehicle by number
+router.get('/search', VehicleController.searchByNumber);
+
 // Get vehicle statistics
 router.get('/stats', VehicleController.getStats);
 

@@ -98,6 +98,22 @@ class ResidentController {
                 duesPenalty = Number(duesRows._sum?.penalty ?? 0);
             }
 
+            // 8. Dynamic Helper Count
+            const helperStats = await prisma.staff.aggregate({
+                where: { 
+                    societyId,
+                    role: { not: 'GUARD' }
+                },
+                _count: { id: true }
+            });
+            const helpersOnDuty = await prisma.staff.count({
+                where: {
+                    societyId,
+                    role: { not: 'GUARD' },
+                    status: 'ON_DUTY'
+                }
+            });
+
             res.json({
                 societyName: society?.name ?? null,
                 unit: unit ? {
@@ -108,7 +124,7 @@ class ResidentController {
                 } : null,
                 gateUpdates: [
                     { type: 'Visitor', count: visitorsToday, label: 'Today', color: 'bg-purple-100 text-purple-600' },
-                    { type: 'Helper', count: '0/4', label: 'In campus', color: 'bg-pink-100 text-pink-600' },
+                    { type: 'Helper', count: `${helpersOnDuty}/${helperStats._count.id}`, label: 'In campus', color: 'bg-pink-100 text-pink-600' },
                     { type: 'Parcel', count: parcelsToCollect, label: 'Yet to collect', color: 'bg-blue-100 text-blue-600' }
                 ],
                 dues: {

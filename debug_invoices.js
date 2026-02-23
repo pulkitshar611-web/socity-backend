@@ -1,27 +1,71 @@
-const prisma = require('./src/lib/prisma');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+const fs = require('fs');
 
-async function debugInvoices() {
-  try {
-    // Mimicking the controller query for societyId: 1
-    const invoices = await prisma.vendorInvoice.findMany({
-      where: { societyId: 1 },
-      include: {
-        vendor: true,
-        society: { select: { name: true } }
-      },
-      orderBy: { invoiceDate: 'desc' }
-    });
+async function debug() {
+    try {
+        const users = await prisma.user.findMany({
+            where: { email: 'resident1@society.com' },
+            include: {
+                ownedUnits: true,
+                rentedUnits: true
+            }
+        });
 
-    console.log('--- RAW API RESPONSE DATA ---');
-    console.log(JSON.stringify(invoices, null, 2));
-    console.log('-----------------------------');
-    console.log(`Total Invoices: ${invoices.length}`);
+        const user = users[0];
+        if (!user) {
+            fs.writeFileSync('debug_invoices.json', JSON.stringify({ error: 'User not found' }, null, 2));
+            return;
+        }
 
-  } catch (error) {
-    console.error(error);
-  } finally {
-    await prisma.$disconnect();
-  }
+        const unitIds = [...user.ownedUnits.map(u => u.id), ...user.rentedUnits.map(u => u.id)];
+        
+        const invoices = await prisma.invoice.findMany({
+            where: {
+                OR: [
+                    { residentId: user.id },
+                    { unitId: { in: unitIds } }
+                ]
+            },
+            include: {
+                unit: true
+            }
+        });
+
+        const dashboardDataCheck = await prisma.invoice.aggregate({
+            where: {
+                unitId: { in: unitIds },
+                status: { in: ['PENDING', 'OVERDUE'] }
+            },
+            _sum: { amount: true }
+        });
+
+        const result = {
+            user: {
+                id: user.id,
+                email: user.email,
+                societyId: user.societyId
+            },
+            unitIds,
+            invoicesCount: invoices.length,
+            invoices: invoices.map(i => ({
+                id: i.id,
+                invoiceNo: i.invoiceNo,
+                societyId: i.societyId,
+                unitId: i.unitId,
+                residentId: i.residentId,
+                amount: i.amount,
+                status: i.status
+            })),
+            dashboardDues_sum: dashboardDataCheck._sum.amount
+        };
+
+        fs.writeFileSync('debug_invoices.json', JSON.stringify(result, null, 2));
+    } catch (e) {
+        fs.writeFileSync('debug_invoices.json', JSON.stringify({ error: e.message, stack: e.stack }, null, 2));
+    } finally {
+        await prisma.$disconnect();
+    }
 }
 
-debugInvoices();
+debug();

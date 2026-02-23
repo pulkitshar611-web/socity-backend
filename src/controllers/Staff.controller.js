@@ -7,9 +7,11 @@ const StaffController = {
       const { role, status, shift } = req.query;
       const societyId = req.user.societyId;
       const isGuard = (req.user.role || '').toUpperCase() === 'GUARD';
+      const isResident = (req.user.role || '').toUpperCase() === 'RESIDENT';
 
       const where = { societyId };
       if (isGuard) where.createdByGuardId = req.user.id;
+      if (isResident) where.status = 'ON_DUTY'; // Residents only see people on duty
       if (role && role !== 'all') where.role = role.toUpperCase();
       if (status && status !== 'all') where.status = status;
       if (shift && shift !== 'all') where.shift = shift;
@@ -228,6 +230,28 @@ const StaffController = {
       res.json({ success: true, message: 'Staff removed successfully' });
     } catch (error) {
       res.status(500).json({ success: false, error: 'Failed to delete staff' });
+    }
+  },
+
+  // Update staff status (Check-in/Check-out)
+  updateStatus: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const societyId = req.user.societyId;
+
+      const staff = await prisma.staff.update({
+        where: { id: parseInt(id) },
+        data: {
+          status,
+          ...(status === 'ON_DUTY' ? { checkInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), attendanceStatus: 'PRESENT' } : { attendanceStatus: 'COMPLETED' })
+        }
+      });
+
+      res.json({ success: true, data: staff });
+    } catch (error) {
+      console.error('Update staff status error:', error);
+      res.status(500).json({ success: false, error: 'Failed to update status' });
     }
   }
 };

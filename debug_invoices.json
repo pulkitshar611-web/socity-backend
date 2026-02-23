@@ -1,0 +1,59 @@
+{
+  "user": {
+    "id": 3,
+    "email": "resident1@society.com",
+    "societyId": 1
+  },
+  "unitIds": [
+    1
+  ],
+  "invoicesCount": 5,
+  "invoices": [
+    {
+      "id": 1,
+      "invoiceNo": "INV-91331799-690",
+      "societyId": 1,
+      "unitId": 1,
+      "residentId": 3,
+      "amount": 1230,
+      "status": "PAID"
+    },
+    {
+      "id": 2,
+      "invoiceNo": "INV-feb2026-A101-6488",
+      "societyId": 1,
+      "unitId": 1,
+      "residentId": 3,
+      "amount": 0,
+      "status": "PENDING"
+    },
+    {
+      "id": 7,
+      "invoiceNo": "INV-39191074-666",
+      "societyId": 1,
+      "unitId": 1,
+      "residentId": 3,
+      "amount": 1200,
+      "status": "PENDING"
+    },
+    {
+      "id": 8,
+      "invoiceNo": "INV-feb2026-A101-7153",
+      "societyId": 1,
+      "unitId": 1,
+      "residentId": 3,
+      "amount": 0,
+      "status": "PENDING"
+    },
+    {
+      "id": 13,
+      "invoiceNo": "INV-40236036-185",
+      "societyId": 1,
+      "unitId": 1,
+      "residentId": 3,
+      "amount": 12000,
+      "status": "PENDING"
+    }
+  ],
+  "dashboardDues_sum": 13200
+}

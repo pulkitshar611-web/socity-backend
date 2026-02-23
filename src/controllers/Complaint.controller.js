@@ -8,21 +8,21 @@ class ComplaintController {
       limit = parseInt(limit);
       const skip = (page - 1) * limit;
 
-      const where = { societyId: req.user.societyId };
+      const where = {};
 
       if (req.user.role === 'RESIDENT') {
         where.reportedById = req.user.id;
-      } else if (req.user.role === 'ADMIN' || req.user.role === 'COMMITTEE' || req.user.role === 'GUARD') {
-        // Admins and Guards see all public tickets in their society, 
+      } else if (req.user.role === 'ADMIN' || req.user.role === 'COMMITTEE') {
+        // Admins see all public tickets in their society, 
         // OR private tickets assigned to them, 
         // OR private tickets they reported
+        where.societyId = req.user.societyId;
         where.OR = [
           { isPrivate: false },
           { assignedToId: req.user.id },
           { reportedById: req.user.id }
         ];
       } else if (req.user.role === 'SUPER_ADMIN') {
-        delete where.societyId; // Super Admins can see across societies
         // Super Admins see public tickets OR admin-escalated complaints
         where.OR = [
           { isPrivate: false },
@@ -31,7 +31,7 @@ class ComplaintController {
       } else if (req.user.role === 'VENDOR') {
         const vendor = await prisma.vendor.findFirst({ where: { email: req.user.email } });
         if (vendor) {
-          where.vendorId = vendor.id;
+            where.vendorId = vendor.id;
         }
       }
 
@@ -118,7 +118,7 @@ class ComplaintController {
         };
 
         const targetServiceTypes = categoryMap[category.toLowerCase()] || [category];
-
+        
         // Find an active vendor in this society matching the service type
         const vendor = await prisma.vendor.findFirst({
           where: {
@@ -129,7 +129,7 @@ class ComplaintController {
         });
 
         if (vendor) {
-          finalVendorId = vendor.id;
+            finalVendorId = vendor.id;
         }
       }
 
@@ -158,20 +158,6 @@ class ComplaintController {
     try {
       const { id } = req.params;
       const { status } = req.body;
-
-      const existing = await prisma.complaint.findUnique({
-        where: { id: parseInt(id) }
-      });
-
-      if (!existing) {
-        return res.status(404).json({ error: 'Complaint not found' });
-      }
-
-      // Logic check: Guards can only update status of their own reported complaints
-      if (req.user.role === 'GUARD' && existing.reportedById !== req.user.id) {
-        return res.status(403).json({ error: 'Guards can only update status for complaints they reported themselves.' });
-      }
-
       const complaint = await prisma.complaint.update({
         where: { id: parseInt(id) },
         data: { status: status.toUpperCase() },
@@ -198,20 +184,6 @@ class ComplaintController {
     try {
       const { id } = req.params;
       const { assignedToId } = req.body;
-
-      const existing = await prisma.complaint.findUnique({
-        where: { id: parseInt(id) }
-      });
-
-      if (!existing) {
-        return res.status(404).json({ error: 'Complaint not found' });
-      }
-
-      // Logic check: Guards can only assign their own reported complaints
-      if (req.user.role === 'GUARD' && existing.reportedById !== req.user.id) {
-        return res.status(403).json({ error: 'Guards can only assign complaints they reported themselves.' });
-      }
-
       const complaint = await prisma.complaint.update({
         where: { id: parseInt(id) },
         data: { assignedToId },

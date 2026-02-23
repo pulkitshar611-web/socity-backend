@@ -5,15 +5,15 @@ const upload = require('../middlewares/upload.middleware');
 
 const router = express.Router();
 
-// ─── Admin routes (require auth) ───
-router.get('/', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), GateController.list);
-router.post('/', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), GateController.create);
-router.patch('/:id/toggle', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), GateController.toggle);
-router.delete('/:id', authenticate, authorize(['ADMIN', 'SUPER_ADMIN']), GateController.remove);
+// Admin / Society Staff Routes (Authenticated)
+router.get('/', authenticate, GateController.list);
+router.post('/', authenticate, authorize(['ADMIN', 'COMMUNITY_MANAGER']), GateController.create);
+router.patch('/:id/toggle', authenticate, authorize(['ADMIN', 'COMMUNITY_MANAGER']), GateController.toggle);
+router.delete('/:id', authenticate, authorize(['ADMIN', 'COMMUNITY_MANAGER']), GateController.remove);
 
-// ─── Public routes (NO auth — used by QR scan) ───
-router.get('/public/:gateId/validate', GateController.validateGate);
-router.get('/public/:gateId/units', GateController.getGateUnits);
-router.post('/public/:gateId/walk-in', upload.single('photo'), GateController.walkInEntry);
+// Public QR Routes (No auth required)
+router.get('/public/:gateId/validate', GateController.validate);
+router.get('/public/:gateId/units', GateController.getUnits);
+router.post('/public/:gateId/walk-in', upload.single('photo'), GateController.submitEntry);
 
 module.exports = router;

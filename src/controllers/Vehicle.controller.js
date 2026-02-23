@@ -134,4 +134,63 @@ const updateStatus = async (req, res) => {
   }
 };
 
-module.exports = { getAll, register, remove, getStats, updateStatus };
+// Search vehicle by number (Resident/Guard/Admin)
+const searchByNumber = async (req, res) => {
+  try {
+    const societyId = req.user.societyId;
+    const { number } = req.query;
+
+    if (!number) {
+      return res.status(400).json({ success: false, message: 'Vehicle number is required' });
+    }
+
+    const vehicle = await prisma.unitVehicle.findFirst({
+      where: {
+        number: {
+          equals: number,
+        },
+        societyId
+      },
+      include: {
+        unit: {
+          select: {
+            block: true,
+            number: true,
+            owner: {
+              select: { phone: true, name: true }
+            },
+            tenant: {
+              select: { phone: true, name: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found in this society' });
+    }
+
+    // Get phone from unit's owner or tenant
+    const ownerPhone = vehicle.unit?.owner?.phone || vehicle.unit?.tenant?.phone || null;
+
+    // Return limited details for residents, full for staff
+    const result = {
+      id: vehicle.id,
+      number: vehicle.number,
+      make: vehicle.make,
+      type: vehicle.type,
+      ownerName: vehicle.ownerName,
+      ownerPhone,
+      unit: vehicle.unit ? `${vehicle.unit.block}-${vehicle.unit.number}` : 'N/A',
+      status: vehicle.status
+    };
+
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Search Vehicle Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getAll, register, remove, getStats, updateStatus, searchByNumber };
