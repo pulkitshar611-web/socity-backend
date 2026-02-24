@@ -129,7 +129,7 @@ class SocietyController {
 
   static async addMember(req, res) {
     try {
-      const { name, email, phone, role, unitId, status, password: plainPassword } = req.body;
+      const { name, email, phone, role, unitId, status, password: plainPassword, securityDeposit } = req.body;
       const societyId = req.user.societyId;
       const bcrypt = require('bcryptjs');
 
@@ -152,7 +152,7 @@ class SocietyController {
           : 'password123';
         const hashedPassword = await bcrypt.hash(passwordToUse, 10);
 
-        // Record who added this user (Admin/Super Admin) – Guard can chat only with creator + residents added by same creator
+        // Record who added this user (Admin/Super Admin)
         const addedByUserId = req.user?.id ?? null;
 
         const user = await tx.user.create({
@@ -168,7 +168,10 @@ class SocietyController {
           }
         });
 
-        // 2. Link to Unit
+        // 2. Link to Unit and Handle Deposit
+        const depositAmount = parseFloat(securityDeposit) || 0;
+        const depositStatus = req.body.depositStatus?.toUpperCase() || 'PENDING';
+
         if (unitId) {
           const isTenant = role?.toLowerCase() === 'tenant';
           await tx.unit.update({
@@ -176,9 +179,39 @@ class SocietyController {
             data: {
               ownerId: isTenant ? undefined : user.id,
               tenantId: isTenant ? user.id : undefined,
-              status: 'OCCUPIED'
+              status: 'OCCUPIED',
+              // Update securityDeposit only if it's already PAID
+              securityDeposit: depositStatus === 'PAID' ? depositAmount : undefined
             }
           });
+
+          // 3. Create Transaction if deposit is provided
+          if (depositAmount > 0) {
+            await tx.transaction.create({
+              data: {
+                type: 'INCOME',
+                category: 'SECURITY_DEPOSIT',
+                amount: depositAmount,
+                date: new Date(),
+                description: `Security Deposit for unit ${unitId} from ${name}`,
+                paymentMethod: 'CASH', // Defaulting to CASH
+                status: depositStatus,
+                societyId: societyId,
+                receivedFrom: name
+              }
+            });
+
+            // 4. Create Notification for the resident
+            await tx.notification.create({
+              data: {
+                userId: user.id,
+                title: 'Security Deposit Required',
+                description: `A security deposit of ₹${depositAmount} is required for your unit. Please contact the management for payment.`,
+                type: 'payment',
+                metadata: { amount: depositAmount, type: 'security_deposit' }
+              }
+            });
+          }
         }
         return user;
       });

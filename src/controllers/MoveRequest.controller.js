@@ -6,8 +6,25 @@ const MoveRequestController = {
     try {
       const { type, status, search } = req.query;
       const societyId = req.user.societyId;
+      const role = req.user.role.toUpperCase();
 
       const where = { societyId };
+
+      // If resident, only show requests for their units
+      if (role === 'RESIDENT') {
+        const userUnits = await prisma.unit.findMany({
+          where: {
+            OR: [
+              { ownerId: req.user.id },
+              { tenantId: req.user.id }
+            ]
+          },
+          select: { id: true }
+        });
+        const unitIds = userUnits.map(u => u.id);
+        where.unitId = { in: unitIds };
+      }
+
       if (type && type !== 'all') where.type = type.toUpperCase().replace('-', '_');
       if (status && status !== 'all') where.status = status.toUpperCase();
 
@@ -91,6 +108,19 @@ const MoveRequestController = {
       }
 
       const normalizedType = type ? type.toUpperCase().replace('-', '_') : 'MOVE_IN';
+      let finalDepositAmount = depositAmount ? parseFloat(depositAmount) : null;
+      let finalDepositStatus = normalizedType === 'MOVE_IN' ? 'PENDING' : null;
+
+      // For MOVE_OUT, automatically fetch deposit from unit
+      if (normalizedType === 'MOVE_OUT' && req.body.actualUnitId) {
+        const unit = await prisma.unit.findUnique({
+          where: { id: req.body.actualUnitId }
+        });
+        if (unit?.securityDeposit) {
+          finalDepositAmount = unit.securityDeposit;
+          finalDepositStatus = 'REFUND_PENDING';
+        }
+      }
 
       const request = await prisma.moveRequest.create({
         data: {
@@ -103,8 +133,8 @@ const MoveRequestController = {
           timeSlot,
           vehicleType,
           vehicleNumber,
-          depositAmount: depositAmount ? parseFloat(depositAmount) : null,
-          depositStatus: normalizedType === 'MOVE_IN' ? 'PAID' : null,
+          depositAmount: finalDepositAmount,
+          depositStatus: finalDepositStatus,
           notes,
           societyId,
         },
@@ -112,6 +142,28 @@ const MoveRequestController = {
           unit: true,
         },
       });
+
+      // Create Notification if it's a MOVE_IN with deposit
+      if (normalizedType === 'MOVE_IN' && finalDepositAmount > 0) {
+        // Try to find the user to notify
+        const targetUnit = await prisma.unit.findUnique({
+          where: { id: request.unitId },
+          include: { owner: true, tenant: true }
+        });
+        const targetUser = targetUnit?.tenant || targetUnit?.owner;
+        
+        if (targetUser) {
+          await prisma.notification.create({
+            data: {
+              userId: targetUser.id,
+              title: 'Move-In Security Deposit',
+              description: `A security deposit of ₹${finalDepositAmount} is required for your Move-In request for unit ${targetUnit.block}-${targetUnit.number}.`,
+              type: 'payment',
+              metadata: { moveRequestId: request.id, amount: finalDepositAmount }
+            }
+          });
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -169,25 +221,105 @@ const MoveRequestController = {
   updateStatus: async (req, res) => {
     try {
       const { id } = req.params;
-      const { status, nocStatus, depositStatus, checklistItems } = req.body;
+      const { status, nocStatus, depositStatus: newDepositStatus, checklistItems } = req.body;
+
+      const currentRequest = await prisma.moveRequest.findUnique({
+        where: { id: parseInt(id) },
+        include: { unit: true }
+      });
+
+      if (!currentRequest) {
+        return res.status(404).json({ success: false, error: 'Move request not found' });
+      }
 
       const updateData = {};
       if (status) updateData.status = status.toUpperCase();
       if (nocStatus) updateData.nocStatus = nocStatus.toUpperCase();
-      if (depositStatus) updateData.depositStatus = depositStatus.toUpperCase().replace('-', '_');
+      if (newDepositStatus) updateData.depositStatus = newDepositStatus.toUpperCase().replace('-', '_');
       if (checklistItems) updateData.checklistItems = checklistItems;
 
-      const request = await prisma.moveRequest.update({
-        where: { id: parseInt(id) },
-        data: updateData,
-        include: {
-          unit: true,
-        },
+      const isCompleting = status && status.toUpperCase() === 'COMPLETED';
+      const isMoveIn = currentRequest.type === 'MOVE_IN';
+      const isMoveOut = currentRequest.type === 'MOVE_OUT';
+
+      const result = await prisma.$transaction(async (tx) => {
+        const updatedRequest = await tx.moveRequest.update({
+          where: { id: parseInt(id) },
+          data: updateData,
+          include: {
+            unit: true,
+          },
+        });
+
+        if (isCompleting) {
+          // Handle Deposit/Refund Logic on Completion
+          if (isMoveIn && updatedRequest.depositAmount > 0) {
+            // 1. Update Unit Deposit
+            await tx.unit.update({
+              where: { id: updatedRequest.unitId },
+              data: { securityDeposit: updatedRequest.depositAmount }
+            });
+
+            // 2. Create INCOME Transaction
+            await tx.transaction.create({
+              data: {
+                type: 'INCOME',
+                category: 'SECURITY_DEPOSIT',
+                amount: updatedRequest.depositAmount,
+                date: new Date(),
+                description: `Security Deposit for Unit ${updatedRequest.unitId} (Move-In)`,
+                paymentMethod: 'CASH',
+                status: 'PAID',
+                societyId: updatedRequest.societyId,
+                receivedFrom: updatedRequest.residentName
+              }
+            });
+
+            // 3. Ensure deposit status is PAID
+            await tx.moveRequest.update({
+              where: { id: updatedRequest.id },
+              data: { depositStatus: 'PAID' }
+            });
+          } else if (isMoveOut) {
+            const refundAmount = updatedRequest.unit?.securityDeposit || 0;
+            
+            if (refundAmount > 0) {
+              // 1. Create EXPENSE Transaction
+              await tx.transaction.create({
+                data: {
+                  type: 'EXPENSE',
+                  category: 'SECURITY_DEPOSIT_REFUND',
+                  amount: refundAmount,
+                  date: new Date(),
+                  description: `Security Deposit Refund for Unit ${updatedRequest.unitId} (Move-Out)`,
+                  paymentMethod: 'CASH',
+                  status: 'PAID',
+                  societyId: updatedRequest.societyId,
+                  paidTo: updatedRequest.residentName
+                }
+              });
+
+              // 2. Reset Unit Deposit
+              await tx.unit.update({
+                where: { id: updatedRequest.unitId },
+                data: { securityDeposit: 0 }
+              });
+
+              // 3. Set deposit status to REFUNDED
+              await tx.moveRequest.update({
+                where: { id: updatedRequest.id },
+                data: { depositStatus: 'REFUNDED' }
+              });
+            }
+          }
+        }
+
+        return updatedRequest;
       });
 
       res.json({
         success: true,
-        data: request,
+        data: result,
       });
     } catch (error) {
       console.error('Update status error:', error);

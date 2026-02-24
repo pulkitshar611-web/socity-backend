@@ -1,0 +1,212 @@
+﻿All Users: [
+  {
+    "id": 1,
+    "name": "Super Admin",
+    "email": "superadmin@society.com",
+    "role": "SUPER_ADMIN",
+    "societyId": 1
+  },
+  {
+    "id": 2,
+    "name": "Admin User",
+    "email": "admin@society.com",
+    "role": "ADMIN",
+    "societyId": 1
+  },
+  {
+    "id": 3,
+    "name": "John Doe",
+    "email": "resident1@society.com",
+    "role": "RESIDENT",
+    "societyId": 1
+  },
+  {
+    "id": 4,
+    "name": "Jane Smith",
+    "email": "resident2@society.com",
+    "role": "RESIDENT",
+    "societyId": 1
+  },
+  {
+    "id": 5,
+    "name": "Security Guard",
+    "email": "guard@society.com",
+    "role": "GUARD",
+    "societyId": 1
+  },
+  {
+    "id": 6,
+    "name": "PestFree Services",
+    "email": "vendor@society.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 7,
+    "name": "Individual User",
+    "email": "individual@example.com",
+    "role": "INDIVIDUAL",
+    "societyId": 1
+  },
+  {
+    "id": 8,
+    "name": "client 1",
+    "email": "client1@gmail.com",
+    "role": "INDIVIDUAL",
+    "societyId": null
+  },
+  {
+    "id": 9,
+    "name": "test",
+    "email": "test@gmail.com",
+    "role": "VENDOR",
+    "societyId": null
+  },
+  {
+    "id": 10,
+    "name": "test",
+    "email": "test1@gmail.com",
+    "role": "VENDOR",
+    "societyId": null
+  },
+  {
+    "id": 11,
+    "name": "test",
+    "email": "testadmin@gmail.com",
+    "role": "ADMIN",
+    "societyId": 2
+  },
+  {
+    "id": 12,
+    "name": "test",
+    "email": "gard@gmail.com",
+    "role": "GUARD",
+    "societyId": 2
+  },
+  {
+    "id": 13,
+    "name": "test4",
+    "email": "test4@gmail.com",
+    "role": "VENDOR",
+    "societyId": null
+  },
+  {
+    "id": 15,
+    "name": "testrecident",
+    "email": "testrecident@gmail.com",
+    "role": "RESIDENT",
+    "societyId": 1
+  },
+  {
+    "id": 16,
+    "name": "Business Review Management System UI",
+    "email": "test10@gmail.com",
+    "role": "VENDOR",
+    "societyId": null
+  },
+  {
+    "id": 17,
+    "name": "test22",
+    "email": "test22@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 18,
+    "name": "kapil",
+    "email": "kapilpatidarkapil0812@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 19,
+    "name": "gard1",
+    "email": "gard1@gmail.com",
+    "role": "GUARD",
+    "societyId": 1
+  },
+  {
+    "id": 20,
+    "name": "ABC",
+    "email": "ABC@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 21,
+    "name": "kapil",
+    "email": "test13@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 22,
+    "name": "tt",
+    "email": "sw@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 23,
+    "name": "rerer",
+    "email": "a@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 24,
+    "name": "aa",
+    "email": "AA@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 25,
+    "name": "asa",
+    "email": "z@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 26,
+    "name": "ll",
+    "email": "l@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 27,
+    "name": "admin2",
+    "email": "admin2@gmail.com",
+    "role": "ADMIN",
+    "societyId": 2
+  },
+  {
+    "id": 28,
+    "name": "qq",
+    "email": "x@gmail.com",
+    "role": "VENDOR",
+    "societyId": null
+  },
+  {
+    "id": 29,
+    "name": "mishra",
+    "email": "mishra@gmail.com",
+    "role": "ADMIN",
+    "societyId": 5
+  },
+  {
+    "id": 30,
+    "name": "ramu",
+    "email": "ramu@gmail.com",
+    "role": "VENDOR",
+    "societyId": 1
+  },
+  {
+    "id": 31,
+    "name": "kiaan",
+    "email": "pulkit@gmail.com",
+    "role": "RESIDENT",
+    "societyId": 1
+  }
+]

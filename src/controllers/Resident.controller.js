@@ -98,7 +98,39 @@ class ResidentController {
                 duesPenalty = Number(duesRows._sum?.penalty ?? 0);
             }
 
-            // 8. Dynamic Helper Count
+            // 8. Security Deposit Status
+            let isDepositPending = false;
+            let pendingDepositAmount = 0;
+            if (unit) {
+                // Check Transactions
+                const pendingDepositTx = await prisma.transaction.findFirst({
+                    where: {
+                        societyId,
+                        category: 'SECURITY_DEPOSIT',
+                        status: 'PENDING',
+                        OR: [
+                            { receivedFrom: user.name },
+                            // If we add unitId to Transaction later, we'd check it here
+                        ]
+                    }
+                });
+
+                // Check MoveRequests
+                const pendingMoveRequest = await prisma.moveRequest.findFirst({
+                    where: {
+                        unitId: unit.id,
+                        type: 'MOVE_IN',
+                        depositStatus: null  // null means deposit not yet paid (PENDING)
+                    }
+                });
+
+                if (pendingDepositTx || pendingMoveRequest) {
+                    isDepositPending = true;
+                    pendingDepositAmount = (pendingDepositTx?.amount || pendingMoveRequest?.depositAmount || 0);
+                }
+            }
+
+            // 9. Dynamic Helper Count
             const helperStats = await prisma.staff.aggregate({
                 where: { 
                     societyId,
@@ -130,7 +162,9 @@ class ResidentController {
                 dues: {
                     amount: duesAmount,
                     penalty: duesPenalty,
-                    penaltyLabel: duesPenalty > 0 ? 'Overdue-Accrued Penalty' : null
+                    penaltyLabel: duesPenalty > 0 ? 'Overdue-Accrued Penalty' : null,
+                    isDepositPending,
+                    pendingDepositAmount
                 },
                 announcements: announcements.map(a => ({
                     id: a.id,

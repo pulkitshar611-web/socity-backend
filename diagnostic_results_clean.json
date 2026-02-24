@@ -1,0 +1,87 @@
+{
+  "user": {
+    "id": 3,
+    "societyId": 1,
+    "role": "RESIDENT"
+  },
+  "complaints": [
+    {
+      "id": 1,
+      "title": "Street Light Not Working",
+      "societyId": 1,
+      "status": "OPEN",
+      "createdAt": "2026-01-24T21:03:21.218Z"
+    },
+    {
+      "id": 2,
+      "title": "Water Leakage in Basement",
+      "societyId": 1,
+      "status": "IN_PROGRESS",
+      "createdAt": "2026-01-24T21:03:21.218Z"
+    },
+    {
+      "id": 3,
+      "title": "Street Light Not Working",
+      "societyId": 1,
+      "status": "OPEN",
+      "createdAt": "2026-01-24T21:04:13.696Z"
+    },
+    {
+      "id": 4,
+      "title": "Water Leakage in Basement",
+      "societyId": 1,
+      "status": "RESOLVED",
+      "createdAt": "2026-01-24T21:04:13.696Z"
+    },
+    {
+      "id": 6,
+      "title": "Street Light Not Working",
+      "societyId": 1,
+      "status": "RESOLVED",
+      "createdAt": "2026-01-24T22:21:56.480Z"
+    },
+    {
+      "id": 7,
+      "title": "Water Leakage in Basement",
+      "societyId": 1,
+      "status": "RESOLVED",
+      "createdAt": "2026-01-24T22:21:56.480Z"
+    },
+    {
+      "id": 9,
+      "title": "Street Light Not Working",
+      "societyId": 1,
+      "status": "OPEN",
+      "createdAt": "2026-01-25T00:42:40.137Z"
+    },
+    {
+      "id": 10,
+      "title": "Water Leakage in Basement",
+      "societyId": 1,
+      "status": "RESOLVED",
+      "createdAt": "2026-01-25T00:42:40.137Z"
+    },
+    {
+      "id": 12,
+      "title": "test",
+      "societyId": 1,
+      "status": "IN_PROGRESS",
+      "createdAt": "2026-01-28T11:14:30.933Z"
+    },
+    {
+      "id": 13,
+      "title": "test",
+      "societyId": 1,
+      "status": "OPEN",
+      "createdAt": "2026-02-24T06:58:11.932Z"
+    },
+    {
+      "id": 14,
+      "title": "test1",
+      "societyId": 1,
+      "status": "OPEN",
+      "createdAt": "2026-02-24T07:07:49.335Z"
+    }
+  ],
+  "mismatched": []
+}
