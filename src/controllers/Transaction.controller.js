@@ -104,58 +104,76 @@ class TransactionController {
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // 1. Total Payments (Income)
-      const totalIncome = await prisma.transaction.aggregate({
-        where: { societyId, type: 'INCOME', status: 'PAID' },
-        _sum: { amount: true }
+      // 1. Fetch Transactions and Journal Adjustments
+      const [
+        totalTrIncome, thisMonthTrIncome, pendingTrIncome, 
+        totalTrExpenses, thisMonthTrExpenses,
+        journalAdjustments,
+        thisMonthJournalAdjustments,
+        payers
+      ] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: { societyId, type: 'INCOME', status: 'PAID' },
+          _sum: { amount: true }
+        }),
+        prisma.transaction.aggregate({
+          where: { societyId, type: 'INCOME', status: 'PAID', date: { gte: firstDayOfMonth } },
+          _sum: { amount: true }
+        }),
+        prisma.transaction.aggregate({
+          where: { societyId, type: 'INCOME', status: 'PENDING' },
+          _sum: { amount: true }
+        }),
+        prisma.transaction.aggregate({
+          where: { societyId, type: 'EXPENSE' },
+          _sum: { amount: true }
+        }),
+        prisma.transaction.aggregate({
+          where: { societyId, type: 'EXPENSE', date: { gte: firstDayOfMonth } },
+          _sum: { amount: true }
+        }),
+        prisma.journalLine.findMany({
+          where: { journalEntry: { societyId, status: 'POSTED' } },
+          include: { account: { select: { type: true } } }
+        }),
+        prisma.journalLine.findMany({
+          where: { 
+            journalEntry: { 
+              societyId, 
+              status: 'POSTED',
+              date: { gte: firstDayOfMonth }
+            } 
+          },
+          include: { account: { select: { type: true } } }
+        }),
+        prisma.transaction.groupBy({
+          by: ['receivedFrom'],
+          where: { societyId, type: 'INCOME' },
+        })
+      ]);
+
+      // Calculate Adjustments
+      let totalJvIncome = 0;
+      let totalJvExpense = 0;
+      journalAdjustments.forEach(line => {
+        if (line.account.type === 'INCOME') totalJvIncome += (line.credit - line.debit);
+        else if (line.account.type === 'EXPENSE') totalJvExpense += (line.debit - line.credit);
       });
 
-      // 2. This Month Income
-      const thisMonthIncome = await prisma.transaction.aggregate({
-        where: { 
-            societyId, 
-            type: 'INCOME', 
-            status: 'PAID',
-            date: { gte: firstDayOfMonth }
-        },
-        _sum: { amount: true }
-      });
-
-      // 3. Pending Payments (Income that is PENDING)
-      const pendingIncome = await prisma.transaction.aggregate({
-        where: { societyId, type: 'INCOME', status: 'PENDING' },
-        _sum: { amount: true }
-      });
-
-      // 4. Total Payers (Unique residents who have paid)
-      const payers = await prisma.transaction.groupBy({
-        by: ['receivedFrom'],
-        where: { societyId, type: 'INCOME' },
-      });
-
-      // 5. Total Expenses (All time)
-      const totalExpenses = await prisma.transaction.aggregate({
-        where: { societyId, type: 'EXPENSE' },
-        _sum: { amount: true }
-      });
-
-      // 6. This Month Expenses
-      const thisMonthExpenses = await prisma.transaction.aggregate({
-        where: { 
-            societyId, 
-            type: 'EXPENSE',
-            date: { gte: firstDayOfMonth }
-        },
-        _sum: { amount: true }
+      let monthJvIncome = 0;
+      let monthJvExpense = 0;
+      thisMonthJournalAdjustments.forEach(line => {
+        if (line.account.type === 'INCOME') monthJvIncome += (line.credit - line.debit);
+        else if (line.account.type === 'EXPENSE') monthJvExpense += (line.debit - line.credit);
       });
 
       res.json({
-        totalIncome: totalIncome._sum.amount || 0,
-        thisMonthIncome: thisMonthIncome._sum.amount || 0,
-        pendingIncome: pendingIncome._sum.amount || 0,
+        totalIncome: (totalTrIncome._sum.amount || 0) + totalJvIncome,
+        thisMonthIncome: (thisMonthTrIncome._sum.amount || 0) + monthJvIncome,
+        pendingIncome: pendingTrIncome._sum.amount || 0,
         totalPayers: payers.length,
-        totalExpenses: totalExpenses._sum.amount || 0,
-        thisMonthExpenses: thisMonthExpenses._sum.amount || 0
+        totalExpenses: (totalTrExpenses._sum.amount || 0) + totalJvExpense,
+        thisMonthExpenses: (thisMonthTrExpenses._sum.amount || 0) + monthJvExpense
       });
     } catch (error) {
       console.error('Transaction Stats Error:', error);

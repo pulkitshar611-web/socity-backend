@@ -6,101 +6,127 @@ class LedgerController {
     try {
       const societyId = req.user.societyId;
       
-      // 1. Fetch Aggregated Data from Transactions
-      const transactions = await prisma.transaction.findMany({
-        where: { societyId, status: 'PAID' },
-        select: { type: true, category: true, amount: true, paymentMethod: true }
-      });
-
-      // 2. Fetch User Defined Accounts
+      // 1. Fetch User Defined Accounts
       const ledgerAccounts = await prisma.ledgerAccount.findMany({
-        where: { societyId }
-      });
-
-      // 3. Current Balances
-      let cashInHand = 0;
-      let bankHDFC = 0; // Simulated logic or from payment methods
-      let bankICICI = 0;
-      
-      // Calculate Assets from Payment Methods
-      transactions.forEach(t => {
-          if (t.type === 'INCOME') {
-              if (t.paymentMethod === 'CASH') cashInHand += t.amount;
-              else bankHDFC += t.amount; // Assume Online goes to HDFC for now
-          } else {
-              if (t.paymentMethod === 'CASH') cashInHand -= t.amount;
-              else bankHDFC -= t.amount;
+        where: { societyId },
+        include: {
+          journalLines: true,
+          transactions: {
+            where: { status: 'PAID' }
           }
+        }
       });
 
-      // Group Income & Expenses by Category
-      const incomeMap = {};
-      const expenseMap = {};
+      // 2. Pre-calculate balances for each account
+      const accountsWithBalance = ledgerAccounts.map(account => {
+        let balance = account.balance || 0; // Starting/Opening balance
 
-      transactions.forEach(t => {
+        // Add Transactions (if linked directly to this account, e.g. Bank Account)
+        account.transactions.forEach(t => {
           if (t.type === 'INCOME') {
-              incomeMap[t.category] = (incomeMap[t.category] || 0) + t.amount;
+            balance += t.amount;
           } else {
-              expenseMap[t.category] = (expenseMap[t.category] || 0) + t.amount;
+            balance -= t.amount;
           }
+        });
+
+        // Add Journal Lines
+        account.journalLines.forEach(line => {
+          // Journal logic: Asset/Expense increase with Debit, Liability/Income increase with Credit
+          if (account.type === 'ASSET' || account.type === 'EXPENSE') {
+            balance += (line.debit - line.credit);
+          } else {
+            balance += (line.credit - line.debit);
+          }
+        });
+
+        return {
+          id: account.id,
+          name: account.name,
+          code: account.code,
+          type: account.type, // ASSET, LIABILITY, INCOME, EXPENSE
+          balance: balance,
+          displayBalanceType: (account.type === 'ASSET' || account.type === 'EXPENSE') ? 'Debit' : 'Credit'
+        };
       });
 
-      // Build Hierarchy
-      const assets = [
-          { id: '1001', name: 'Cash in Hand', code: '1001', balance: cashInHand, type: 'Debit' },
-          { id: '1002', name: 'Bank - HDFC', code: '1002', balance: bankHDFC, type: 'Debit' }
-      ];
-      
-      // Merge defined accounts if any
-      // ...
-
-      const liabilities = [
-          // Simplified for now
-          { id: '2001', name: 'Security Deposits', code: '2001', balance: 0, type: 'Credit' }
-      ];
-
-      const income = Object.keys(incomeMap).map((cat, idx) => ({
-          id: `300${idx}`, name: cat, code: `300${idx}`, balance: incomeMap[cat], type: 'Credit'
-      }));
-
-      const expenses = Object.keys(expenseMap).map((cat, idx) => ({
-          id: `400${idx}`, name: cat, code: `400${idx}`, balance: expenseMap[cat], type: 'Debit'
-      }));
+      // 3. Fallback for "Cash" if not in ledgerAccounts (for backward compatibility if needed)
+      // Actually, it's better to ensure a "Cash in Hand" account exists in seed or created on fly.
+      // But for now, let's group what we have.
 
       const accountGroups = [
         {
-            id: 1,
-            name: 'Assets',
-            type: 'Asset',
-            balance: assets.reduce((sum, a) => sum + a.balance, 0),
-            trend: 'up',
-            accounts: assets
+          id: 1,
+          name: 'Assets',
+          type: 'Asset',
+          balance: 0,
+          accounts: []
         },
         {
-            id: 2,
-            name: 'Liabilities',
-            type: 'Liability',
-            balance: liabilities.reduce((sum, a) => sum + a.balance, 0),
-            trend: 'down',
-            accounts: liabilities
+          id: 2,
+          name: 'Liabilities',
+          type: 'Liability',
+          balance: 0,
+          accounts: []
         },
         {
-            id: 3,
-            name: 'Income',
-            type: 'Income',
-            balance: income.reduce((sum, a) => sum + a.balance, 0),
-            trend: 'up',
-            accounts: income
+          id: 3,
+          name: 'Income',
+          type: 'Income',
+          balance: 0,
+          accounts: []
         },
         {
-            id: 4,
-            name: 'Expenses',
-            type: 'Expense',
-            balance: expenses.reduce((sum, a) => sum + a.balance, 0),
-            trend: 'down',
-            accounts: expenses
+          id: 4,
+          name: 'Expenses',
+          type: 'Expense',
+          balance: 0,
+          accounts: []
         }
       ];
+
+      accountsWithBalance.forEach(acc => {
+        let group;
+        if (acc.type === 'ASSET') group = accountGroups[0];
+        else if (acc.type === 'LIABILITY') group = accountGroups[1];
+        else if (acc.type === 'INCOME') group = accountGroups[2];
+        else if (acc.type === 'EXPENSE') group = accountGroups[3];
+
+        if (group) {
+          group.accounts.push({
+            id: acc.id,
+            name: acc.name,
+            code: acc.code,
+            balance: acc.balance,
+            type: acc.displayBalanceType
+          });
+          group.balance += acc.balance;
+        }
+      });
+
+      // 4. Special Handling for Transactions NOT linked to a specific bank account (Global Income/Expense)
+      // If a transaction has bankAccountId = null, it might be "General Cash"
+      const unlinkedTransactions = await prisma.transaction.findMany({
+        where: { societyId, status: 'PAID', bankAccountId: null }
+      });
+
+      if (unlinkedTransactions.length > 0) {
+        let cashBalance = 0;
+        unlinkedTransactions.forEach(t => {
+          if (t.type === 'INCOME') cashBalance += t.amount;
+          else cashBalance -= t.amount;
+        });
+
+        // Add a virtual "General Cash" account if balance exists or just add to Assets
+        accountGroups[0].accounts.push({
+          id: 'v-cash',
+          name: 'General Cash (Unlinked)',
+          code: '1000',
+          balance: cashBalance,
+          type: 'Debit'
+        });
+        accountGroups[0].balance += cashBalance;
+      }
 
       res.json(accountGroups);
 

@@ -566,18 +566,41 @@ class SocietyController {
       const vacantUnits = totalUnits - occupiedUnits;
 
       // ========== FINANCIAL DATA ==========
-      const transactions = await prisma.transaction.findMany({
-        where: { societyId },
-        select: { amount: true, type: true, status: true, createdAt: true, category: true, receivedFrom: true }
-      });
+      // Fetch transactions and journal adjustments
+      const [transactions, journalAdjustments] = await Promise.all([
+        prisma.transaction.findMany({
+          where: { societyId },
+          select: { amount: true, type: true, status: true, createdAt: true, category: true, receivedFrom: true }
+        }),
+        prisma.journalLine.findMany({
+          where: { journalEntry: { societyId, status: 'POSTED' } },
+          include: { account: { select: { type: true } } }
+        })
+      ]);
 
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
 
-      // Total revenue (all income)
-      const totalRevenue = transactions
+      // Base revenue from transactions
+      let totalRevenue = transactions
         .filter(t => t.type === 'INCOME')
         .reduce((sum, t) => sum + t.amount, 0);
+
+      // Base expenses from transactions
+      let totalExpenses = transactions
+        .filter(t => t.type === 'EXPENSE')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      // Add Journal Entry adjustments
+      journalAdjustments.forEach(line => {
+        if (line.account.type === 'INCOME') {
+          // Credit increases income, Debit decreases it
+          totalRevenue += (line.credit - line.debit);
+        } else if (line.account.type === 'EXPENSE') {
+          // Debit increases expense, Credit decreases it
+          totalExpenses += (line.debit - line.credit);
+        }
+      });
 
       // Pending dues
       const pendingDues = transactions
@@ -591,11 +614,6 @@ class SocietyController {
           return t.type === 'INCOME' && t.status === 'PAID' &&
             d.getMonth() === currentMonth && d.getFullYear() === currentYear;
         })
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      // Total expenses
-      const totalExpenses = transactions
-        .filter(t => t.type === 'EXPENSE')
         .reduce((sum, t) => sum + t.amount, 0);
 
       // Parking income

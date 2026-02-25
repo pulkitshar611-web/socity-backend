@@ -662,6 +662,7 @@ model EmergencyBarcode {
   qrCodeUrl    String
   createdAt    DateTime @default(now())
   societyId    Int?
+  userId       Int?     // Link to the user who created it
 
   @@map("emergencybarcode")
 }

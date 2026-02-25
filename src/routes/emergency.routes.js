@@ -13,6 +13,10 @@ router.patch('/barcodes/:id/status', authenticate, EmergencyBarcodeController.up
 router.post('/barcodes/:id/regenerate', authenticate, EmergencyBarcodeController.regenerateBarcode);
 router.delete('/barcodes/:id', authenticate, EmergencyBarcodeController.deleteBarcode);
 
+// Public scanning endpoints (no authentication required)
+router.get('/public/barcodes/:id', EmergencyBarcodeController.getPublicBarcode);
+router.post('/public/barcodes/:id/scan', EmergencyBarcodeController.submitScan);
+
 // Emergency Alerts
 router.post('/alerts', authenticate, EmergencyAlertController.createAlert);
 router.get('/alerts', authenticate, EmergencyAlertController.listAlerts);
