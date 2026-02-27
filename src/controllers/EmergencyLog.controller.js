@@ -6,33 +6,10 @@ class EmergencyLogController {
       const where = {};
       const role = (req.user.role || '').toUpperCase();
       
-      if (role === 'RESIDENT') {
-        // Residents only see logs for their own barcodes
-        let phone = req.user.phone;
-        if (!phone) {
-          const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-          phone = user?.phone;
-        }
+      if (role === 'RESIDENT' || role === 'INDIVIDUAL') {
+        // Find barcodes owned by this user
         const userBarcodes = await prisma.emergencyBarcode.findMany({
-          where: { phone: phone || 'N/A', societyId: req.user.societyId },
-          select: { id: true }
-        });
-        const barcodeIds = userBarcodes.map(b => b.id);
-        if (barcodeIds.length > 0) {
-          where.barcodeId = { in: barcodeIds };
-        } else {
-          // No barcodes found, return empty
-          return res.json([]);
-        }
-      } else if (role === 'INDIVIDUAL') {
-        // Individual users: see logs for their own barcodes (by phone, no societyId)
-        let phone = req.user.phone;
-        if (!phone) {
-          const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-          phone = user?.phone;
-        }
-        const userBarcodes = await prisma.emergencyBarcode.findMany({
-          where: { phone: phone || 'N/A', societyId: null },
+          where: { userId: req.user.id },
           select: { id: true }
         });
         const barcodeIds = userBarcodes.map(b => b.id);

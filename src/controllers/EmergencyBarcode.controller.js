@@ -77,7 +77,7 @@ class EmergencyBarcodeController {
       // Generate a unique non-guessable ID
       const barcodeId = `eb-${Math.random().toString(36).substring(2, 15)}`;
       // Use the live domain for the QR code URL
-      const publicUrl = `https://socity.kiaantechnology.com/emergency/${barcodeId}`;
+      const publicUrl = `https://socity.kiaantechnology.com/emergency?id=${barcodeId}`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(publicUrl)}`;
 
       const barcode = await prisma.emergencyBarcode.create({
@@ -180,11 +180,12 @@ class EmergencyBarcodeController {
           id: true,
           residentName: true,
           unit: true,
-          phone: true, // Include primary phone
+          phone: true,
           label: true,
           type: true,
           status: true,
-          societyId: true
+          societyId: true,
+          userId: true
         }
       });
 
@@ -192,29 +193,39 @@ class EmergencyBarcodeController {
         return res.status(404).json({ error: 'Invalid or inactive barcode' });
       }
 
+      // Helper to mask phone numbers
+      const maskPhone = (phone) => {
+        if (!phone || phone === 'N/A') return 'N/A';
+        const str = phone.toString();
+        if (str.length < 4) return str;
+        return str.substring(0, 2) + '*'.repeat(str.length - 4) + str.substring(str.length - 2);
+      };
+
+      // Mask primary phone
+      const publicBarcode = {
+        ...barcode,
+        phone: maskPhone(barcode.phone)
+      };
+
       // Fetch resident's emergency contacts if it's a society-linked barcode
       let emergencyContacts = [];
       if (barcode.societyId) {
-        // Find the user to get their emergency contacts. 
-        // We try by phone first, but fallback to name + society if it was a custom phone.
-        let residentUser = await prisma.user.findFirst({
-          where: {
-            phone: barcode.phone,
-            societyId: barcode.societyId
-          }
-        });
+        let residentUser = null;
+        if (barcode.userId) {
+          residentUser = await prisma.user.findUnique({ where: { id: barcode.userId } });
+        }
 
         if (!residentUser) {
           residentUser = await prisma.user.findFirst({
             where: {
-              name: barcode.residentName,
+              phone: barcode.phone,
               societyId: barcode.societyId
             }
           });
         }
 
         if (residentUser) {
-          emergencyContacts = await prisma.emergencyContact.findMany({
+          const contacts = await prisma.emergencyContact.findMany({
             where: {
               residentId: residentUser.id,
               available: true
@@ -225,11 +236,17 @@ class EmergencyBarcodeController {
               category: true
             }
           });
+
+          // Mask contact numbers
+          emergencyContacts = contacts.map(c => ({
+            ...c,
+            phone: maskPhone(c.phone)
+          }));
         }
       }
 
       res.json({
-        ...barcode,
+        ...publicBarcode,
         emergencyContacts
       });
     } catch (error) {
@@ -260,7 +277,32 @@ class EmergencyBarcodeController {
         }
       });
 
-      // TODO: Trigger notification
+      // Trigger notification to the resident
+      if (barcode.userId) {
+        try {
+          const notification = await prisma.notification.create({
+            data: {
+              userId: barcode.userId,
+              title: isEmergency ? '🚨 Emergency QR Scanned' : 'QR Code Scanned',
+              description: `${visitorName} (${visitorPhone}) scanned your QR code for ${barcode.label || barcode.type}. Reason: ${reason || 'Not specified'}`,
+              type: 'emergency_qr',
+              metadata: {
+                logId: log.id,
+                visitorName,
+                visitorPhone,
+                barcodeId: id
+              }
+            }
+          });
+          
+          const { getIO } = require('../lib/socket');
+          getIO().to(`user_${barcode.userId}`).emit('new_notification', notification);
+          console.log(`[EmergencyBarcode] Notification sent to user ${barcode.userId}`);
+        } catch (notifyError) {
+          console.error('[EmergencyBarcode] Failed to send notification:', notifyError);
+        }
+      }
+
       res.status(201).json({ message: 'Resident notified successfully', logId: log.id });
     } catch (error) {
       res.status(500).json({ error: error.message });
