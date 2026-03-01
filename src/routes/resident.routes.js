@@ -5,6 +5,7 @@ const { authenticate } = require('../middlewares/auth.middleware');
 const upload = require('../middlewares/upload.middleware');
 
 router.get('/dashboard', authenticate, ResidentController.getDashboardData);
+router.post('/pay-deposit', authenticate, ResidentController.paySecurityDeposit);
 
 // My Unit
 router.get('/unit', authenticate, ResidentController.getUnitData);

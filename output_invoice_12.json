@@ -1,0 +1,55 @@
+[
+  {
+    "id": 12,
+    "invoiceNo": "INV-feb2026-AK8-9593",
+    "societyId": 1,
+    "unitId": 6,
+    "residentId": 30,
+    "amount": 1200,
+    "maintenance": 0,
+    "utilities": 0,
+    "penalty": 0,
+    "description": null,
+    "dueDate": "2026-03-10T07:00:00.000Z",
+    "status": "PENDING",
+    "paidDate": null,
+    "paymentMode": null,
+    "createdAt": "2026-02-28T22:27:09.594Z",
+    "updatedAt": "2026-02-28T22:27:09.594Z",
+    "items": [
+      {
+        "id": 1,
+        "invoiceId": 12,
+        "name": "water",
+        "amount": 1200,
+        "createdAt": "2026-02-28T22:27:09.594Z",
+        "updatedAt": "2026-02-28T22:27:09.594Z"
+      }
+    ],
+    "unit": {
+      "id": 6,
+      "block": "A",
+      "number": "K8",
+      "floor": 3,
+      "type": "VILLA",
+      "areaSqFt": 1200,
+      "status": "OCCUPIED",
+      "pets": 0,
+      "membersCount": 0,
+      "societyId": 1,
+      "ownerId": 30,
+      "tenantId": null,
+      "leaseStartDate": null,
+      "leaseEndDate": null,
+      "rentAmount": null,
+      "securityDeposit": null,
+      "maintenanceCharges": null,
+      "parkingSlot": null,
+      "vehicleNumber": null,
+      "notes": null,
+      "emergencyContact": null,
+      "createdAt": "2026-02-28T22:25:52.155Z",
+      "updatedAt": "2026-02-28T22:26:54.616Z"
+    }
+  }
+]

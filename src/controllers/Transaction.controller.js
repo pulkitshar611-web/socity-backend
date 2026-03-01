@@ -23,22 +23,22 @@ class TransactionController {
     try {
       console.log('Recording Income:', req.body);
       const { category, amount, date, receivedFrom, paymentMethod, description, invoiceNo, bankAccountId } = req.body;
-      
+
       if (!req.user || !req.user.societyId) {
-          console.error('User missing societyId:', req.user);
-          return res.status(400).json({ error: 'User does not belong to a society' });
+        console.error('User missing societyId:', req.user);
+        return res.status(400).json({ error: 'User does not belong to a society' });
       }
 
       const parsedAmount = parseFloat(amount);
       if (isNaN(parsedAmount)) {
-          return res.status(400).json({ error: 'Invalid amount' });
+        return res.status(400).json({ error: 'Invalid amount' });
       }
 
-            // Verify bank if provided
+      // Verify bank if provided
       if (bankAccountId) {
         const bank = await prisma.ledgerAccount.findUnique({ where: { id: parseInt(bankAccountId) } });
         if (!bank || bank.societyId !== req.user.societyId) {
-            return res.status(400).json({ error: 'Invalid Bank Account' });
+          return res.status(400).json({ error: 'Invalid Bank Account' });
         }
       }
 
@@ -51,7 +51,7 @@ class TransactionController {
           receivedFrom,
           paymentMethod,
           description,
-          invoiceNo: invoiceNo || null, 
+          invoiceNo: invoiceNo || null,
           status: 'PAID',
           societyId: req.user.societyId,
           bankAccountId: bankAccountId ? parseInt(bankAccountId) : null
@@ -68,12 +68,12 @@ class TransactionController {
   static async recordExpense(req, res) {
     try {
       const { category, amount, date, paidTo, paymentMethod, description, invoiceNo, bankAccountId } = req.body;
-      
+
       // Verify bank if provided
       if (bankAccountId) {
         const bank = await prisma.ledgerAccount.findUnique({ where: { id: parseInt(bankAccountId) } });
         if (!bank || bank.societyId !== req.user.societyId) {
-            return res.status(400).json({ error: 'Invalid Bank Account' });
+          return res.status(400).json({ error: 'Invalid Bank Account' });
         }
       }
 
@@ -106,7 +106,7 @@ class TransactionController {
 
       // 1. Fetch Transactions and Journal Adjustments
       const [
-        totalTrIncome, thisMonthTrIncome, pendingTrIncome, 
+        totalTrIncome, thisMonthTrIncome, pendingTrIncome,
         totalTrExpenses, thisMonthTrExpenses,
         journalAdjustments,
         thisMonthJournalAdjustments,
@@ -137,12 +137,12 @@ class TransactionController {
           include: { account: { select: { type: true } } }
         }),
         prisma.journalLine.findMany({
-          where: { 
-            journalEntry: { 
-              societyId, 
+          where: {
+            journalEntry: {
+              societyId,
               status: 'POSTED',
               date: { gte: firstDayOfMonth }
-            } 
+            }
           },
           include: { account: { select: { type: true } } }
         }),
@@ -185,7 +185,7 @@ class TransactionController {
     try {
       const { id } = req.params;
       const { amount, ...data } = req.body;
-      
+
       // Check if transaction exists and belongs to society
       const existing = await prisma.transaction.findUnique({ where: { id: parseInt(id) } });
       if (!existing) return res.status(404).json({ error: 'Transaction not found' });
@@ -197,11 +197,59 @@ class TransactionController {
       const updated = await prisma.transaction.update({
         where: { id: parseInt(id) },
         data: {
-            ...data,
-            amount: amount ? parseFloat(amount) : undefined,
-            date: data.date ? new Date(data.date) : undefined
+          ...data,
+          amount: amount ? parseFloat(amount) : undefined,
+          date: data.date ? new Date(data.date) : undefined
         }
       });
+
+      // If verifying a PENDING Security Deposit → also update unit & moveRequest
+      if (
+        data.status === 'COMPLETED' &&
+        existing.status === 'PENDING' &&
+        existing.category === 'SECURITY_DEPOSIT'
+      ) {
+        const depositAmount = amount ? parseFloat(amount) : existing.amount;
+        const receivedFrom = existing.receivedFrom;
+
+        // Find the resident by name to get their unit
+        const resident = await prisma.user.findFirst({
+          where: { name: receivedFrom, societyId: existing.societyId },
+          include: { ownedUnits: true, rentedUnits: true }
+        });
+
+        if (resident) {
+          const unit = resident.ownedUnits[0] || resident.rentedUnits[0];
+          if (unit) {
+            // Update unit securityDeposit
+            await prisma.unit.update({
+              where: { id: unit.id },
+              data: { securityDeposit: depositAmount }
+            });
+
+            // Update pending moveRequest depositStatus
+            await prisma.moveRequest.updateMany({
+              where: {
+                unitId: unit.id,
+                type: 'MOVE_IN',
+                depositStatus: { not: 'PAID' }
+              },
+              data: { depositStatus: 'PAID' }
+            });
+
+            // Send notification to resident
+            await prisma.notification.create({
+              data: {
+                userId: resident.id,
+                title: 'Security Deposit Verified ✅',
+                message: `Your security deposit of ₹${depositAmount.toLocaleString()} has been verified and confirmed by admin.`,
+                type: 'GENERAL'
+              }
+            }).catch(() => { }); // Don't fail if notification fails
+          }
+        }
+      }
+
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -211,7 +259,7 @@ class TransactionController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
-      
+
       const existing = await prisma.transaction.findUnique({ where: { id: parseInt(id) } });
       if (!existing) return res.status(404).json({ error: 'Transaction not found' });
       if (req.user.role !== 'SUPER_ADMIN' && existing.societyId !== req.user.societyId) {

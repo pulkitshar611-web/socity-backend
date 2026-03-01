@@ -101,6 +101,7 @@ class ResidentController {
             // 8. Security Deposit Status
             let isDepositPending = false;
             let pendingDepositAmount = 0;
+            let depositPaymentMethod = null;
             if (unit) {
                 // Check Transactions
                 const pendingDepositTx = await prisma.transaction.findFirst({
@@ -127,12 +128,13 @@ class ResidentController {
                 if (pendingDepositTx || pendingMoveRequest) {
                     isDepositPending = true;
                     pendingDepositAmount = (pendingDepositTx?.amount || pendingMoveRequest?.depositAmount || 0);
+                    depositPaymentMethod = pendingDepositTx?.paymentMethod || null;
                 }
             }
 
             // 9. Dynamic Helper Count
             const helperStats = await prisma.staff.aggregate({
-                where: { 
+                where: {
                     societyId,
                     role: { not: 'GUARD' }
                 },
@@ -164,7 +166,8 @@ class ResidentController {
                     penalty: duesPenalty,
                     penaltyLabel: duesPenalty > 0 ? 'Overdue-Accrued Penalty' : null,
                     isDepositPending,
-                    pendingDepositAmount
+                    pendingDepositAmount,
+                    depositPaymentMethod
                 },
                 announcements: announcements.map(a => ({
                     id: a.id,
@@ -192,6 +195,104 @@ class ResidentController {
 
         } catch (error) {
             console.error('Resident Dashboard Error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Deposit Payment ---
+    static async paySecurityDeposit(req, res) {
+        try {
+            const { id: userId, societyId } = req.user;
+            const { paymentMethod = 'ONLINE' } = req.body;
+
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+                include: { ownedUnits: true, rentedUnits: true }
+            });
+
+            const unit = user.ownedUnits[0] || user.rentedUnits[0];
+            if (!unit) {
+                return res.status(400).json({ error: "No unit associated with user" });
+            }
+
+            let depositAmount = 0;
+            let transactionProcessed = false;
+
+            const isOnline = paymentMethod === 'ONLINE';
+            const newStatus = isOnline ? 'COMPLETED' : 'PENDING';
+
+            // 1. Check Pending Transactions
+            const pendingDepositTx = await prisma.transaction.findFirst({
+                where: { societyId, category: 'SECURITY_DEPOSIT', status: 'PENDING', OR: [{ receivedFrom: user.name }] }
+            });
+
+            if (pendingDepositTx) {
+                depositAmount = pendingDepositTx.amount;
+                await prisma.transaction.update({
+                    where: { id: pendingDepositTx.id },
+                    data: { status: newStatus, paymentMethod, date: new Date() }
+                });
+                transactionProcessed = true;
+
+                if (isOnline) {
+                    await prisma.unit.update({
+                        where: { id: unit.id },
+                        data: { securityDeposit: depositAmount }
+                    });
+                }
+            }
+
+            // 2. Check MoveRequests
+            const pendingMoveRequest = await prisma.moveRequest.findFirst({
+                where: { unitId: unit.id, type: 'MOVE_IN', depositStatus: null }
+            });
+
+            if (pendingMoveRequest) {
+                if (!depositAmount) depositAmount = pendingMoveRequest.depositAmount;
+
+                if (isOnline) {
+                    await prisma.moveRequest.update({
+                        where: { id: pendingMoveRequest.id },
+                        data: { depositStatus: 'PAID' }
+                    });
+
+                    if (!transactionProcessed) {
+                        await prisma.unit.update({
+                            where: { id: unit.id },
+                            data: { securityDeposit: depositAmount }
+                        });
+                    }
+                }
+            }
+
+            if (!pendingMoveRequest && !pendingDepositTx) {
+                return res.status(400).json({ error: "No pending security deposit found" });
+            }
+
+            if (!transactionProcessed) {
+                await prisma.transaction.create({
+                    data: {
+                        societyId,
+                        type: 'INCOME',
+                        category: 'SECURITY_DEPOSIT',
+                        amount: depositAmount,
+                        status: newStatus,
+                        paymentMethod,
+                        referenceNo: `DEP-${Date.now()}`,
+                        description: `Security deposit payment by ${user.name}`,
+                        receivedFrom: user.name,
+                        date: new Date()
+                    }
+                });
+            }
+
+            res.json({
+                message: isOnline ? "Security deposit paid successfully" : "Payment request submitted. Awaiting Admin verification.",
+                amount: depositAmount,
+                status: newStatus
+            });
+        } catch (error) {
+            console.error('Pay Security Deposit Error:', error);
             res.status(500).json({ error: error.message });
         }
     }

@@ -1,0 +1,32 @@
+[
+  {
+    "number": "101",
+    "areaSqFt": 1500,
+    "type": "3BHK"
+  },
+  {
+    "number": "102",
+    "areaSqFt": 1200,
+    "type": "2BHK"
+  },
+  {
+    "number": "101",
+    "areaSqFt": 1800,
+    "type": "3BHK"
+  },
+  {
+    "number": "143",
+    "areaSqFt": 1800,
+    "type": "3BHK"
+  },
+  {
+    "number": "132",
+    "areaSqFt": 1300,
+    "type": "VILLA"
+  },
+  {
+    "number": "K8",
+    "areaSqFt": 1200,
+    "type": "VILLA"
+  }
+]

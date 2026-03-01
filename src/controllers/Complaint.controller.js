@@ -12,10 +12,11 @@ class ComplaintController {
 
       if (req.user.role === 'RESIDENT') {
         where.reportedById = req.user.id;
-      } else if (req.user.role === 'ADMIN' || req.user.role === 'COMMITTEE') {
-        // Admins see all public tickets in their society, 
-        // OR private tickets assigned to them, 
-        // OR private tickets they reported
+      } else if (req.user.role === 'ADMIN') {
+        // Main Admin sees all tickets (private and public) in their society
+        where.societyId = req.user.societyId;
+      } else if (req.user.role === 'COMMITTEE') {
+        // Committee members only see public tickets, or private ones assigned to them/reported by them
         where.societyId = req.user.societyId;
         where.OR = [
           { isPrivate: false },
@@ -23,15 +24,12 @@ class ComplaintController {
           { reportedById: req.user.id }
         ];
       } else if (req.user.role === 'SUPER_ADMIN') {
-        // Super Admins see public tickets OR admin-escalated complaints
-        where.OR = [
-          { isPrivate: false },
-          { escalatedToSuperAdmin: true }
-        ];
+        // Super Admins ONLY see escalated complaints
+        where.escalatedToSuperAdmin = true;
       } else if (req.user.role === 'VENDOR') {
         const vendor = await prisma.vendor.findFirst({ where: { email: req.user.email } });
         if (vendor) {
-            where.vendorId = vendor.id;
+          where.vendorId = vendor.id;
         }
       }
 
@@ -118,7 +116,7 @@ class ComplaintController {
         };
 
         const targetServiceTypes = categoryMap[category.toLowerCase()] || [category];
-        
+
         // Find an active vendor in this society matching the service type
         const vendor = await prisma.vendor.findFirst({
           where: {
@@ -129,7 +127,7 @@ class ComplaintController {
         });
 
         if (vendor) {
-            finalVendorId = vendor.id;
+          finalVendorId = vendor.id;
         }
       }
 

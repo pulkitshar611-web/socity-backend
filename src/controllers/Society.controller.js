@@ -171,11 +171,56 @@ class SocietyController {
         // 2. Link to Unit and Handle Deposit
         const depositAmount = parseFloat(securityDeposit) || 0;
         const depositStatus = req.body.depositStatus?.toUpperCase() || 'PENDING';
+        let finalUnitId = unitId;
 
-        if (unitId) {
+        // Handle direct unit creation from resident form
+        if (!finalUnitId && req.body.block && req.body.number) {
+          // Check if unit already exists to avoid duplication
+          const existingUnit = await tx.unit.findFirst({
+            where: { societyId, block: req.body.block, number: req.body.number }
+          });
+
+          if (existingUnit) {
+            finalUnitId = existingUnit.id;
+          } else {
+            const newUnit = await tx.unit.create({
+              data: {
+                block: req.body.block,
+                number: req.body.number,
+                floor: parseInt(req.body.floor) || 1,
+                type: req.body.type || '2BHK',
+                areaSqFt: parseFloat(req.body.areaSqFt) || 1200,
+                societyId,
+                status: 'OCCUPIED'
+              }
+            });
+            finalUnitId = newUnit.id;
+          }
+        }
+
+        if (finalUnitId) {
+          const numericUnitId = parseInt(finalUnitId);
+          const unit = await tx.unit.findUnique({
+            where: { id: numericUnitId },
+            include: { owner: true, tenant: true }
+          });
+
+          if (!unit) {
+            throw new Error('Unit not found');
+          }
+
           const isTenant = role?.toLowerCase() === 'tenant';
+
+          // PROTECTION: Check if unit belongs to someone else
+          if (!isTenant && unit.ownerId && unit.ownerId !== user.id) {
+            throw new Error(`Unit ${unit.block}-${unit.number} already has an owner (${unit.owner.name}).`);
+          }
+          if (isTenant && unit.tenantId && unit.tenantId !== user.id) {
+            throw new Error(`Unit ${unit.block}-${unit.number} already has a tenant (${unit.tenant.name}).`);
+          }
+
           await tx.unit.update({
-            where: { id: parseInt(unitId) },
+            where: { id: numericUnitId },
             data: {
               ownerId: isTenant ? undefined : user.id,
               tenantId: isTenant ? user.id : undefined,
@@ -187,14 +232,16 @@ class SocietyController {
 
           // 3. Create Transaction if deposit is provided
           if (depositAmount > 0) {
+            const txPaymentMethod = depositStatus === 'PENDING' ? 'ONLINE' : 'CASH';
+
             await tx.transaction.create({
               data: {
                 type: 'INCOME',
                 category: 'SECURITY_DEPOSIT',
                 amount: depositAmount,
                 date: new Date(),
-                description: `Security Deposit for unit ${unitId} from ${name}`,
-                paymentMethod: 'CASH', // Defaulting to CASH
+                description: `Security Deposit for unit ${numericUnitId} from ${name}`,
+                paymentMethod: txPaymentMethod, // Defaulting to ONLINE for pending so resident can pay
                 status: depositStatus,
                 societyId: societyId,
                 receivedFrom: name
@@ -223,6 +270,53 @@ class SocietyController {
     }
   }
 
+  static async updateMember(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, email, phone, role, status } = req.body;
+      const societyId = req.user.societyId;
+
+      const member = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+      if (!member || (member.societyId !== societyId && req.user.role !== 'SUPER_ADMIN')) {
+        return res.status(404).json({ error: 'Member not found' });
+      }
+
+      let updatedRole = role?.toUpperCase();
+      if (updatedRole === 'OWNER' || updatedRole === 'TENANT') {
+        updatedRole = 'RESIDENT';
+      }
+
+      // Check for valid roles (optional but safer)
+      const validRoles = ['SUPER_ADMIN', 'ADMIN', 'RESIDENT', 'GUARD', 'VENDOR', 'ACCOUNTANT', 'INDIVIDUAL', 'COMMUNITY_MANAGER', 'COMMITTEE'];
+      if (updatedRole && !validRoles.includes(updatedRole)) {
+        updatedRole = 'RESIDENT';
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: parseInt(id) },
+        data: {
+          name,
+          email,
+          phone,
+          role: updatedRole,
+          status: status?.toUpperCase() || undefined
+        }
+      });
+
+      // If status is SUSPENDED, logout the user immediately by deleting sessions
+      if (updated.status === 'SUSPENDED') {
+        await prisma.userSession.deleteMany({
+          where: { userId: updated.id }
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error('Update Member Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   static async removeMember(req, res) {
     try {
       const { id } = req.params;
@@ -241,15 +335,89 @@ class SocietyController {
       }
 
       await prisma.$transaction(async (tx) => {
+        // 1. Identify associated units
+        const units = await tx.unit.findMany({
+          where: { OR: [{ ownerId: memberId }, { tenantId: memberId }] }
+        });
+        const unitIds = units.map(u => u.id);
+
+        if (unitIds.length > 0) {
+          // Unlink user from units and mark vacant
+          await tx.unit.updateMany({
+            where: { id: { in: unitIds } },
+            data: {
+              ownerId: null,
+              tenantId: null,
+              status: 'VACANT',
+              securityDeposit: null
+            }
+          });
+
+          // Delete explicit unit-level data
+          await tx.unitVehicle.deleteMany({ where: { unitId: { in: unitIds } } });
+          await tx.unitPet.deleteMany({ where: { unitId: { in: unitIds } } });
+          await tx.moveRequest.deleteMany({ where: { unitId: { in: unitIds } } });
+        }
+
+        // 2. Delete all related user data across the system
         await tx.userSession.deleteMany({ where: { userId: memberId } });
-        await tx.unit.updateMany({
-          where: { OR: [{ ownerId: memberId }, { tenantId: memberId }] },
-          data: {
-            ownerId: null,
-            tenantId: null,
-            status: 'VACANT'
+        await tx.notification.deleteMany({ where: { userId: memberId } });
+
+        // Community & Social
+        await tx.communityComment.deleteMany({ where: { authorId: memberId } });
+        await tx.buzzLike.deleteMany({ where: { userId: memberId } });
+        await tx.communityBuzz.deleteMany({ where: { authorId: memberId } });
+        await tx.eventRsvp.deleteMany({ where: { userId: memberId } });
+
+        // Complaints & Requests
+        await tx.complaintComment.deleteMany({ where: { userId: memberId } });
+        await tx.complaint.updateMany({ where: { assignedToId: memberId }, data: { assignedToId: null } });
+        await tx.complaint.deleteMany({ where: { reportedById: memberId } });
+        await tx.facilityRequest.deleteMany({ where: { userId: memberId } });
+
+        // Emergency & Safety
+        await tx.sOSAlert.deleteMany({ where: { residentId: memberId } });
+        await tx.emergencyContact.deleteMany({ where: { residentId: memberId } });
+
+        // Visitors & Parcels
+        await tx.visitor.deleteMany({ where: { residentId: memberId } });
+        // NOTE: If parcel recipientId exists, uncomment below, but residentId is standard here
+        // await tx.parcel.deleteMany({ where: { recipientId: memberId } });
+
+        // Marketplace
+        await tx.marketplaceItem.deleteMany({ where: { ownerId: memberId } });
+
+        // Billing & Finance
+        await tx.invoiceItem.deleteMany({ where: { invoice: { residentId: memberId } } });
+        await tx.invoice.deleteMany({ where: { residentId: memberId } });
+
+        if (member.name) {
+          await tx.transaction.deleteMany({
+            where: { societyId, receivedFrom: member.name }
+          });
+        }
+
+        // Chats & Groups
+        await tx.chatMessage.deleteMany({ where: { senderId: memberId } });
+        await tx.groupMessage.deleteMany({ where: { userId: memberId } });
+        await tx.groupMember.deleteMany({ where: { userId: memberId } });
+
+        // Ensure no conversations are left hanging incorrectly (optional, but let's clear direct ones)
+        const convos = await tx.conversation.findMany({
+          where: {
+            OR: [
+              { participantId: memberId },
+              { directParticipantId: memberId }
+            ]
           }
         });
+        if (convos.length > 0) {
+          const convoIds = convos.map(c => c.id);
+          await tx.chatMessage.deleteMany({ where: { conversationId: { in: convoIds } } });
+          await tx.conversation.deleteMany({ where: { id: { in: convoIds } } });
+        }
+
+        // 3. Delete the actual Member record
         await tx.user.delete({ where: { id: memberId } });
       });
 
@@ -397,7 +565,7 @@ class SocietyController {
     try {
       const { id } = req.params;
       const { name, address, city, state, pincode, subscriptionPlan, billingPlanId, discount } = req.body;
-      
+
       const updateData = {
         name,
         address,
@@ -802,21 +970,21 @@ class SocietyController {
   static async getGuidelines(req, res) {
     try {
       const { societyId } = req.query;
-      
+
       // If societyId is provided, fetch specific + global.
       // If not provided (Super Admin view all), fetch all (or we could default to global only, but usually Super Admin wants all).
       // However, for Society Admin (who sends their ID), we want THEIR guidelines + GLOBAL guidelines.
-      
+
       let where = {};
       if (societyId) {
-          where = {
-            OR: [
-                { societyId: parseInt(societyId) },
-                { societyId: null }
-            ]
-          };
+        where = {
+          OR: [
+            { societyId: parseInt(societyId) },
+            { societyId: null }
+          ]
+        };
       }
-      
+
       const guidelines = await prisma.communityGuideline.findMany({
         where,
         include: {
@@ -967,7 +1135,7 @@ class SocietyController {
       const society = await prisma.society.update({
         where: { id: societyId },
         data: { isPaid: true },
-        include: { 
+        include: {
           users: { where: { role: 'ADMIN' }, take: 1 },
           billingPlan: true
         }

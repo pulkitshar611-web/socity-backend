@@ -72,7 +72,7 @@ class UserController {
             "user-profile-updated",
             payload,
           );
-      } catch (_) {}
+      } catch (_) { }
 
       res.json({
         message: "Photo uploaded successfully",
@@ -186,10 +186,10 @@ class UserController {
       // Find User
       const user = await prisma.user.findUnique({
         where: { email },
-        include: { 
+        include: {
           society: {
             include: { billingPlan: true }
-          } 
+          }
         },
       });
 
@@ -203,12 +203,12 @@ class UserController {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Suspended users cannot login
-      if (user.status === "SUSPENDED") {
-        return res.status(403).json({
-          error:
-            "Your account has been suspended. Please contact your administrator.",
-        });
+      // Block login for non-active users
+      if (user.status === "SUSPENDED" || user.status === "PENDING") {
+        const message = user.status === "SUSPENDED"
+          ? "Your account has been suspended. Please contact your administrator."
+          : "Your account is still pending activation. Please wait for approval.";
+        return res.status(403).json({ error: message });
       }
 
       // If society is suspended, block login
@@ -260,11 +260,11 @@ class UserController {
     try {
       const user = await prisma.user.findUnique({
         where: { id: req.user.id },
-        include: { 
+        include: {
           society: {
             include: { billingPlan: true }
-          }, 
-          assignedVendor: true 
+          },
+          assignedVendor: true
         },
       });
       if (user) {
@@ -352,7 +352,7 @@ class UserController {
             "user-profile-updated",
             payload,
           );
-      } catch (_) {}
+      } catch (_) { }
 
       // Remove password from response
       const { password: _, ...userWithoutPassword } = user;
@@ -589,9 +589,14 @@ class UserController {
   static async deleteAdmin(req, res) {
     try {
       const { id } = req.params;
-      await prisma.user.delete({
-        where: { id: parseInt(id) },
+      const adminId = parseInt(id);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.userSession.deleteMany({ where: { userId: adminId } });
+        await tx.notification.deleteMany({ where: { userId: adminId } });
+        await tx.user.delete({ where: { id: adminId } });
       });
+
       res.json({ message: "Admin deleted successfully" });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -601,16 +606,86 @@ class UserController {
   static async deleteUser(req, res) {
     try {
       const { id } = req.params;
-      const userId = parseInt(id);
+      const memberId = parseInt(id);
 
-      // Clean up sessions
-      await prisma.userSession.deleteMany({
-        where: { userId },
-      });
+      const member = await prisma.user.findUnique({ where: { id: memberId } });
+      if (!member) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
-      // Delete the user
-      await prisma.user.delete({
-        where: { id: userId },
+      await prisma.$transaction(async (tx) => {
+        // 1. Identify associated units
+        const units = await tx.unit.findMany({
+          where: { OR: [{ ownerId: memberId }, { tenantId: memberId }] }
+        });
+        const unitIds = units.map(u => u.id);
+
+        if (unitIds.length > 0) {
+          await tx.unit.updateMany({
+            where: { id: { in: unitIds } },
+            data: {
+              ownerId: null,
+              tenantId: null,
+              status: 'VACANT',
+              securityDeposit: null
+            }
+          });
+
+          await tx.unitVehicle.deleteMany({ where: { unitId: { in: unitIds } } });
+          await tx.unitPet.deleteMany({ where: { unitId: { in: unitIds } } });
+          await tx.moveRequest.deleteMany({ where: { unitId: { in: unitIds } } });
+        }
+
+        // 2. Delete all related user data across the system
+        await tx.userSession.deleteMany({ where: { userId: memberId } });
+        await tx.notification.deleteMany({ where: { userId: memberId } });
+
+        await tx.communityComment.deleteMany({ where: { authorId: memberId } });
+        await tx.buzzLike.deleteMany({ where: { userId: memberId } });
+        await tx.communityBuzz.deleteMany({ where: { authorId: memberId } });
+        await tx.eventRsvp.deleteMany({ where: { userId: memberId } });
+
+        await tx.complaintComment.deleteMany({ where: { userId: memberId } });
+        await tx.complaint.updateMany({ where: { assignedToId: memberId }, data: { assignedToId: null } });
+        await tx.complaint.deleteMany({ where: { reportedById: memberId } });
+        await tx.facilityRequest.deleteMany({ where: { userId: memberId } });
+
+        await tx.sOSAlert.deleteMany({ where: { residentId: memberId } });
+        await tx.emergencyContact.deleteMany({ where: { residentId: memberId } });
+
+        await tx.visitor.deleteMany({ where: { residentId: memberId } });
+
+        await tx.marketplaceItem.deleteMany({ where: { ownerId: memberId } });
+
+        await tx.invoiceItem.deleteMany({ where: { invoice: { residentId: memberId } } });
+        await tx.invoice.deleteMany({ where: { residentId: memberId } });
+
+        if (member.name && member.societyId) {
+          await tx.transaction.deleteMany({
+            where: { societyId: member.societyId, receivedFrom: member.name }
+          });
+        }
+
+        await tx.chatMessage.deleteMany({ where: { senderId: memberId } });
+        await tx.groupMessage.deleteMany({ where: { userId: memberId } });
+        await tx.groupMember.deleteMany({ where: { userId: memberId } });
+
+        const convos = await tx.conversation.findMany({
+          where: {
+            OR: [
+              { participantId: memberId },
+              { directParticipantId: memberId }
+            ]
+          }
+        });
+        if (convos.length > 0) {
+          const convoIds = convos.map(c => c.id);
+          await tx.chatMessage.deleteMany({ where: { conversationId: { in: convoIds } } });
+          await tx.conversation.deleteMany({ where: { id: { in: convoIds } } });
+        }
+
+        // 3. Delete the actual User record
+        await tx.user.delete({ where: { id: memberId } });
       });
 
       res.json({ message: "User deleted successfully" });

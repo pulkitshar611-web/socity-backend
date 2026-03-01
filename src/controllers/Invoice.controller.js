@@ -99,7 +99,36 @@ class InvoiceController {
                 return true;
             });
 
-            res.json(unique.map(inv => ({
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+
+            const secDeposits = await prisma.transaction.findMany({
+                where: {
+                    societyId,
+                    category: 'SECURITY_DEPOSIT',
+                    status: 'COMPLETED',
+                    receivedFrom: user ? user.name : undefined
+                },
+                orderBy: { date: 'desc' }
+            });
+
+            const mappedDeposits = secDeposits.map(tx => ({
+                id: 'tx_' + tx.id,
+                invoiceNo: tx.referenceNo || `DEP-${tx.id}`,
+                unit: myUnits.length > 0 ? `${myUnits[0].block}-${myUnits[0].number}` : 'N/A',
+                amount: tx.amount,
+                maintenance: 0,
+                utilities: 0,
+                penalty: 0,
+                dueDate: tx.date.toISOString().split('T')[0],
+                createdAt: tx.createdAt.toISOString().split('T')[0],
+                status: tx.status === 'COMPLETED' ? 'paid' : (tx.status === 'PENDING' ? 'pending' : tx.status.toLowerCase()),
+                paidDate: tx.status === 'COMPLETED' ? tx.date.toISOString().split('T')[0] : null,
+                paymentMode: tx.paymentMode,
+                description: tx.description || 'Security Deposit',
+                items: [{ name: 'Security Deposit', amount: tx.amount }]
+            }));
+
+            const uniqueMapped = unique.map(inv => ({
                 id: inv.id,
                 invoiceNo: inv.invoiceNo,
                 unit: inv.unit ? `${inv.unit.block}-${inv.unit.number}` : 'N/A',
@@ -114,7 +143,9 @@ class InvoiceController {
                 paymentMode: inv.paymentMode,
                 description: inv.description,
                 items: inv.items || []
-            })));
+            }));
+
+            res.json([...uniqueMapped, ...mappedDeposits].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
         } catch (error) {
             console.error('My Invoices Error:', error);
             res.status(500).json({ error: error.message });
@@ -252,28 +283,28 @@ class InvoiceController {
             });
 
             const yearMonth = month.replace('-', ''); // jan-2025 -> jan2025
-        
-        // Find existing invoices for this month to avoid duplicates
-        const existingInvoices = await prisma.invoice.findMany({
-            where: {
-                societyId,
-                invoiceNo: { startsWith: `INV-${yearMonth}-` }
-            },
-            select: { unitId: true }
-        });
-        const existingUnitIds = new Set(existingInvoices.map(inv => inv.unitId));
 
-        const createdInvoices = [];
-        const skippedUnits = [];
+            // Find existing invoices for this month to avoid duplicates
+            const existingInvoices = await prisma.invoice.findMany({
+                where: {
+                    societyId,
+                    invoiceNo: { startsWith: `INV-${yearMonth}-` }
+                },
+                select: { unitId: true }
+            });
+            const existingUnitIds = new Set(existingInvoices.map(inv => inv.unitId));
 
-        for (const unit of units) {
-            if (existingUnitIds.has(unit.id)) {
-                skippedUnits.push(unit.id);
-                continue;
-            }
+            const createdInvoices = [];
+            const skippedUnits = [];
 
-            const invoiceNo = `INV-${yearMonth}-${unit.block}${unit.number}-${Date.now().toString().slice(-4)}`;
-                
+            for (const unit of units) {
+                if (existingUnitIds.has(unit.id)) {
+                    skippedUnits.push(unit.id);
+                    continue;
+                }
+
+                const invoiceNo = `INV-${yearMonth}-${unit.block}${unit.number}-${Date.now().toString().slice(-4)}`;
+
                 // Calculate total amount from charges
                 const chargeTotal = charges.reduce((sum, c) => sum + (c.defaultAmount || 0), 0);
                 const totalAmount = parseFloat(maintenanceAmount || 0) + parseFloat(utilityAmount || 0) + chargeTotal;
@@ -298,13 +329,13 @@ class InvoiceController {
                     }
                 });
                 createdInvoices.push(invoice);
-        }
+            }
 
-        res.status(201).json({ 
-            message: `${createdInvoices.length} bills generated successfully. ${skippedUnits.length} skipped (already generated).`, 
-            count: createdInvoices.length,
-            skipped: skippedUnits.length 
-        });
+            res.status(201).json({
+                message: `${createdInvoices.length} bills generated successfully. ${skippedUnits.length} skipped (already generated).`,
+                count: createdInvoices.length,
+                skipped: skippedUnits.length
+            });
         } catch (error) {
             console.error('Generate Bills Error:', error);
             res.status(500).json({ error: error.message });
@@ -524,8 +555,8 @@ class InvoiceController {
                     continue;
                 }
 
-                let rule = rules.find(r => r.unitType === unit.type);
-                if (!rule) rule = rules.find(r => r.unitType === 'ALL');
+                let rule = rules.find(r => r.unitType?.toUpperCase().trim() === unit.type?.toUpperCase().trim());
+                if (!rule) rule = rules.find(r => r.unitType?.toUpperCase() === 'ALL');
 
                 let maintenanceAmount = 0;
                 if (rule) {
@@ -563,8 +594,8 @@ class InvoiceController {
                 createdInvoices.push(invoice);
             }
 
-            res.status(201).json({ 
-                message: `${createdInvoices.length} bills generated successfully. ${skippedUnits.length} skipped (already generated).`, 
+            res.status(201).json({
+                message: `${createdInvoices.length} bills generated successfully. ${skippedUnits.length} skipped (already generated).`,
                 count: createdInvoices.length,
                 skipped: skippedUnits.length
             });
@@ -603,7 +634,7 @@ class InvoiceController {
             let updatedCount = 0;
             for (const inv of overdueInvoices) {
                 let penalty = 0;
-                
+
                 if (config.feeType === 'FIXED') {
                     penalty = config.amount;
                 } else if (config.feeType === 'PERCENTAGE') {
@@ -633,7 +664,7 @@ class InvoiceController {
                 }
             }
 
-            res.json({ 
+            res.json({
                 message: `Successfully processed late fees for ${overdueInvoices.length} invoices. ${updatedCount} were updated with new penalties.`,
                 processed: overdueInvoices.length,
                 updated: updatedCount
