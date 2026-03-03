@@ -124,7 +124,7 @@ const path = require('path');
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global Error Handler Caught:', err);
-  
+
   try {
     const log = `[${new Date().toISOString()}] Error: ${err.message}\nStack: ${err.stack}\n\n`;
     fs.appendFileSync(path.join(__dirname, '../crash.log'), log);
@@ -138,6 +138,34 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 9000;
 
+const InvoiceController = require('./controllers/Invoice.controller');
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (with Socket.io support)`);
+
+  // Set up background job to send payment reminders every 24 hours
+  setInterval(async () => {
+    console.log('--- RUNNING AUTOMATED BACKGROUND JOBS ---');
+    try {
+      // 1. Send Payment Reminders
+      const remindCount = await InvoiceController.sendUpcomingReminders();
+      console.log(`Job Complete: ${remindCount} reminders sent.`);
+
+      // 2. Generate Monthly Fixed Invoices (Automated Billing)
+      await InvoiceController.autoGenerateFixedInvoices();
+    } catch (err) {
+      console.error('Background Jobs Error:', err);
+    }
+  }, 24 * 60 * 60 * 1000);
+
+  // Run once on startup after 1 minute (to avoid overloading startup)
+  setTimeout(async () => {
+    console.log('Starting initial background job check...');
+    try {
+      await InvoiceController.sendUpcomingReminders();
+      await InvoiceController.autoGenerateFixedInvoices();
+    } catch (err) {
+      console.error('Initial Background Job Error:', err);
+    }
+  }, 6 * 1000); // Wait 60 seconds (but 6s for quick testing in dev if needed, user said 1min)
 });

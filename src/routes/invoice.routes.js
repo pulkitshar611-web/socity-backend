@@ -13,6 +13,7 @@ router.post('/generate', authenticate, authorize(['ADMIN']), InvoiceController.g
 router.post('/finalize', authenticate, authorize(['ADMIN']), InvoiceController.finalizeSetup);
 router.post('/apply-late-fees', authenticate, authorize(['ADMIN']), InvoiceController.applyLateFees);
 router.patch('/:invoiceNo/pay', authenticate, authorize(['ADMIN', 'ACCOUNTANT']), InvoiceController.markAsPaid);
+router.post('/upcoming-reminders', authenticate, authorize(['ADMIN']), InvoiceController.sendUpcomingReminders);
 router.delete('/:id', authenticate, authorize(['ADMIN']), InvoiceController.delete);
 
 module.exports = router;

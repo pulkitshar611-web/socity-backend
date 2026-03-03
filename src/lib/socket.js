@@ -38,11 +38,17 @@ const initSocket = (server) => {
     });
 
     // --- WebRTC Signaling ---
-    
+
     // Visitor starts a call to a resident (userId)
     socket.on('call-start', ({ toUserId, visitorName, visitorPhone, offer }) => {
-      console.log(`[Socket] Call start from ${visitorName} to user_${toUserId}`);
-      io.to(`user_${toUserId}`).emit('incoming-call', {
+      const roomName = `user_${toUserId}`;
+      const clients = io.sockets.adapter.rooms.get(roomName);
+      const clientCount = clients ? clients.size : 0;
+
+      console.log(`[Socket] Call start from ${visitorName} to ${roomName} (Active Clients: ${clientCount})`);
+
+      // Use socket.to() to prevent sending the call back to the caller if they happen to share the same user room
+      socket.to(roomName).emit('incoming-call', {
         fromSocketId: socket.id,
         visitorName,
         visitorPhone,
@@ -64,7 +70,7 @@ const initSocket = (server) => {
     // Signaling ICE Candidates
     socket.on('ice-candidate', ({ toUserId, toSocketId, candidate }) => {
       if (toUserId) {
-        io.to(`user_${toUserId}`).emit('ice-candidate', { candidate });
+        socket.to(`user_${toUserId}`).emit('ice-candidate', { candidate });
       } else if (toSocketId) {
         io.to(toSocketId).emit('ice-candidate', { candidate });
       }
@@ -73,7 +79,7 @@ const initSocket = (server) => {
     // Peer ends the call
     socket.on('call-end', ({ toUserId, toSocketId }) => {
       if (toUserId) {
-        io.to(`user_${toUserId}`).emit('call-ended');
+        socket.to(`user_${toUserId}`).emit('call-ended');
       } else if (toSocketId) {
         io.to(toSocketId).emit('call-ended');
       }

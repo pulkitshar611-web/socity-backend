@@ -6,6 +6,7 @@ class VisitorController {
   static async list(req, res) {
     try {
       const societyId = req.user.societyId;
+      console.log(`[VisitorList] User: ${req.user.id}, Role: ${req.user.role}, Society: ${societyId}, Status: ${req.query.status}`);
       if (!societyId && req.user.role !== 'SUPER_ADMIN') {
         return res.status(403).json({ error: 'Visitor list is only available for society-scoped users' });
       }
@@ -13,65 +14,100 @@ class VisitorController {
         return res.json([]);
       }
       const { status, search, unitId, date, block } = req.query;
-      const where = { societyId };
+      const where = {
+        AND: [
+          { societyId: societyId }
+        ]
+      };
 
-      // Guard: only see (1) visitors they checked in, OR (2) pending/approved not yet checked in by any guard
-      // Do NOT show checkedInById=null with CHECKED_IN/CHECKED_OUT (legacy) – else both guards see same list
-      const isGuard = (req.user.role || '').toUpperCase() === 'GUARD';
-      if (isGuard) {
-        where.AND = (where.AND || []).concat({
+      const userRole = (req.user.role || '').toUpperCase();
+      const isGuard = userRole === 'GUARD';
+      const isAdmin = userRole === 'ADMIN' || userRole === 'COMMUNITY-MANAGER';
+
+      if (isAdmin) {
+        // Admins see all
+      } else if (isGuard) {
+        const activeStatuses = ['PENDING', 'APPROVED', 'CHECKED_IN'];
+        const historicalStatuses = ['CHECKED_OUT', 'REJECTED', 'EXITED'];
+        if (status && status !== 'all') {
+          const mappedStatus = status.toUpperCase().replace('-', '_');
+          if (activeStatuses.includes(mappedStatus) || historicalStatuses.includes(mappedStatus) || status === 'history') {
+            // Let it be handled by the common status filter logic below
+          } else {
+            return res.json([]);
+          }
+        } else {
+          where.AND.push({ status: { in: activeStatuses } });
+        }
+      } else {
+        // Residents see their own visitors (direct or thru their linked units)
+        const currentUserId = Number(req.user.id);
+        const currentUserEmail = req.user.email;
+        where.AND.push({
           OR: [
-            { checkedInById: req.user.id },
-            { checkedInById: null, status: { in: ['PENDING', 'APPROVED', 'PRE_APPROVED'] } }
+            { residentId: currentUserId },
+            {
+              unit: {
+                OR: [
+                  { ownerId: currentUserId },
+                  { tenantId: currentUserId },
+                  { members: { some: { email: currentUserEmail } } }
+                ]
+              }
+            }
           ]
         });
       }
 
-      // Status filter
+      // Status filter (Global/Admin/Resident)
       if (status && status !== 'all') {
-        const statusMap = {
-          'checked-in': 'CHECKED_IN',
-          'checked-out': 'CHECKED_OUT',
-          'approved': 'APPROVED',
-          'pending': 'PENDING',
-          'rejected': 'DENIED' // or REJECTED
-        };
-        where.status = statusMap[status] || status.toUpperCase();
+        if (status === 'history') {
+          where.AND.push({ status: { in: ['CHECKED_OUT', 'REJECTED', 'EXITED'] } });
+        } else {
+          const statusMap = {
+            'checked-in': 'CHECKED_IN',
+            'checked-out': 'CHECKED_OUT',
+            'exited': 'EXITED',
+            'approved': 'APPROVED',
+            'pending': 'PENDING',
+            'rejected': 'REJECTED'
+          };
+          const mapped = statusMap[status] || status.toUpperCase().replace('-', '_');
+          where.AND.push({ status: mapped });
+        }
       }
 
       // Unit filter
-      if (unitId) where.visitingUnitId = parseInt(unitId);
+      if (unitId) where.AND.push({ visitingUnitId: parseInt(unitId) });
 
       // Block filter
       if (block && block !== 'all-blocks') {
-        where.unit = {
-          block: block
-        };
+        where.AND.push({ unit: { block: block } });
       }
 
       // Date filter
       if (date) {
         const now = new Date();
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-        const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+        const startOfDay = new Date(new Date().setHours(0, 0, 0, 0));
+        const startOfWeek = new Date(new Date().setDate(now.getDate() - now.getDay()));
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
         if (date === 'today') {
-          where.createdAt = { gte: startOfDay };
+          where.AND.push({ createdAt: { gte: startOfDay } });
         } else if (date === 'yesterday') {
           const yesterdayStart = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(0, 0, 0, 0);
           const yesterdayEnd = new Date(new Date().setDate(new Date().getDate() - 1)).setHours(23, 59, 59, 999);
-          where.createdAt = { gte: new Date(yesterdayStart), lte: new Date(yesterdayEnd) };
+          where.AND.push({ createdAt: { gte: new Date(yesterdayStart), lte: new Date(yesterdayEnd) } });
         } else if (date === 'week') {
-          where.createdAt = { gte: startOfWeek };
+          where.AND.push({ createdAt: { gte: startOfWeek } });
         } else if (date === 'month') {
-          where.createdAt = { gte: startOfMonth };
+          where.AND.push({ createdAt: { gte: startOfMonth } });
         }
       }
 
-      // Search filter (AND with guard filter so guard scope is never lost)
+      // Search filter
       if (search && search.trim()) {
-        where.AND = (where.AND || []).concat({
+        where.AND.push({
           OR: [
             { name: { contains: search } },
             { phone: { contains: search } },
@@ -91,17 +127,20 @@ class VisitorController {
               tenant: true
             }
           },
-          resident: true
+          resident: true,
+          checkedInBy: true
         },
         orderBy: { createdAt: 'desc' }
       });
 
       res.json(visitors);
+
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: error.message });
     }
   }
+
 
   static async getStats(req, res) {
     try {
@@ -114,10 +153,33 @@ class VisitorController {
 
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-      // Guard: same scope as list – only my visitors OR pending/approved (not legacy checked-in with null)
-      const guardScope = (req.user.role || '').toUpperCase() === 'GUARD'
-        ? { OR: [{ checkedInById: req.user.id }, { checkedInById: null, status: { in: ['PENDING', 'APPROVED', 'PRE_APPROVED'] } }] }
-        : {};
+      // Guards/Admins see all society-wide stats; Residents see only their own stats
+      const isGuard = (req.user.role || '').toUpperCase() === 'GUARD';
+      const isAdmin = (req.user.role || '').toUpperCase() === 'ADMIN';
+
+      let guardScope = {};
+      if (isAdmin || isGuard) {
+        guardScope = { societyId }; // Guards/Admins see all for society
+      } else if ((req.user.role || '').toUpperCase() === 'RESIDENT') {
+        const currentUserId = Number(req.user.id);
+        const currentUserEmail = req.user.email;
+        guardScope = {
+          societyId,
+          OR: [
+            { residentId: currentUserId },
+            {
+              unit: {
+                OR: [
+                  { ownerId: currentUserId },
+                  { tenantId: currentUserId },
+                  { members: { some: { email: currentUserEmail } } }
+                ]
+              }
+            }
+          ]
+        };
+      }
+
 
       const [totalToday, activeNow, preApproved, totalMonth] = await Promise.all([
         prisma.visitor.count({
@@ -297,33 +359,82 @@ class VisitorController {
     try {
       const { id } = req.params;
       const { status } = req.body;
-      const existing = await prisma.visitor.findUnique({ where: { id: parseInt(id) } });
+      const existing = await prisma.visitor.findUnique({
+        where: { id: parseInt(id) },
+        include: { unit: { include: { members: true } } }
+      });
       if (!existing) return res.status(404).json({ error: 'Visitor not found' });
-      if (req.user.role !== 'SUPER_ADMIN' && existing.societyId !== req.user.societyId) {
+
+      const userId = Number(req.user.id);
+      const userRole = (req.user.role || '').toUpperCase();
+      const isAdmin = userRole === 'ADMIN' || userRole === 'COMMUNITY-MANAGER' || userRole === 'SUPER_ADMIN';
+
+      if (!isAdmin && existing.societyId !== req.user.societyId) {
         return res.status(403).json({ error: 'Access denied: visitor belongs to another society' });
       }
+
+      // Residents can only update their own visitors or visitors to their unit
+      if (userRole === 'RESIDENT') {
+        const isLinkedToUnit =
+          existing.residentId === userId ||
+          existing.unit.ownerId === userId ||
+          existing.unit.tenantId === userId ||
+          existing.unit.members.some(m => m.email === req.user.email);
+
+        if (!isLinkedToUnit) {
+          return res.status(403).json({ error: 'Access denied: you can only update status for visitors to your unit' });
+        }
+      }
+
       const newStatus = (status || '').toUpperCase();
       const updateData = { status: newStatus };
-      // When guard approves or checks in, record this guard as the one who did it
-      if ((req.user.role || '').toUpperCase() === 'GUARD' && (newStatus === 'CHECKED_IN' || newStatus === 'APPROVED')) {
-        updateData.checkedInById = req.user.id;
-        if (newStatus === 'CHECKED_IN') updateData.entryTime = new Date();
+
+      // Residents "take ownership" of the visit tracking when they approve
+      if (userRole === 'RESIDENT' && (newStatus === 'CHECKED_IN' || newStatus === 'APPROVED')) {
+        updateData.residentId = userId;
       }
+
+      // Auto-record entry time if status becomes CHECKED_IN
+      if (newStatus === 'CHECKED_IN' && !existing.entryTime) {
+        updateData.entryTime = new Date();
+      }
+
+      // Auto-record exit time if status becomes EXITED or CHECKED_OUT
+      if ((newStatus === 'EXITED' || newStatus === 'CHECKED_OUT') && !existing.exitTime) {
+        updateData.exitTime = new Date();
+      }
+
+      // Record who approved/checked in
+      if (newStatus === 'CHECKED_IN' || newStatus === 'APPROVED') {
+        updateData.checkedInById = userId;
+      }
+
       const visitor = await prisma.visitor.update({
         where: { id: parseInt(id) },
         data: updateData
       });
 
-      // Emit socket notification to the visitor-entry page
+      // Emit socket notification
       try {
         const io = getIO();
+
+        // 1. To the public visitor-entry page (for individual tracking)
         io.to(`user_visitor_${id}`).emit('visitor_status_updated', {
           id: visitor.id,
           status: visitor.status
         });
+
+        // 2. To the Guards/Society (for dashboard refresh)
+        io.to(`society_${visitor.societyId}`).emit('visitor_status_updated', {
+          id: visitor.id,
+          status: visitor.status,
+          name: visitor.name,
+          message: `Visitor ${visitor.name} status updated to ${visitor.status}`
+        });
       } catch (ioErr) {
         console.error('Visitor status socket emission failed:', ioErr);
       }
+
 
       res.json(visitor);
     } catch (error) {

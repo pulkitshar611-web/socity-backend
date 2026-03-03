@@ -130,12 +130,16 @@ const GateController = {
 
             const units = await prisma.unit.findMany({
                 where: { societyId: gate.societyId },
-                select: { id: true, number: true, block: true },
+                include: {
+                    owner: { select: { name: true } },
+                    tenant: { select: { name: true } }
+                },
                 orderBy: [
                     { block: 'asc' },
                     { number: 'asc' }
                 ]
             });
+
 
             res.json(units);
         } catch (error) {
@@ -170,7 +174,27 @@ const GateController = {
                 photoUrl = uploadResponse.secure_url;
             }
 
-            // Create visitor as PENDING for guard approval
+            console.log(`[Gate QR] Submission for gate ${gateId}, unit: ${visitingUnitId}`);
+
+            // Auto-assign resident if unit is provided
+            let residentId = null;
+            let unitInfo = null;
+            if (visitingUnitId) {
+                unitInfo = await prisma.unit.findUnique({
+                    where: { id: parseInt(visitingUnitId) },
+                    include: { owner: true, tenant: true }
+                });
+                if (unitInfo) {
+                    residentId = unitInfo.tenantId || unitInfo.ownerId;
+                    console.log(`[Gate QR] Found residentId: ${residentId} for unit ${unitInfo.block}-${unitInfo.number}`);
+                } else {
+                    console.log(`[Gate QR] Unit ${visitingUnitId} not found`);
+                }
+            } else {
+                console.log(`[Gate QR] No visitingUnitId provided in submission`);
+            }
+
+            // Create visitor as PENDING for approval
             const visitor = await prisma.visitor.create({
                 data: {
                     name,
@@ -180,6 +204,7 @@ const GateController = {
                     fromLocation,
                     vehicleNo,
                     visitingUnitId: visitingUnitId ? parseInt(visitingUnitId) : null,
+                    residentId: residentId,
                     societyId: gate.societyId,
                     gateId: gate.id,
                     status: 'PENDING',
@@ -190,19 +215,37 @@ const GateController = {
                 }
             });
 
-            // Emit real-time notification to guards of this society
+            // Emit real-time notification to guards and the specific resident
             try {
                 const io = getIO();
+
+                // 1. Notify Guards (Society wide)
                 io.to(`society_${gate.societyId}`).emit('new_visitor_request', {
                     id: visitor.id,
                     name: visitor.name,
                     purpose: visitor.purpose,
                     unit: visitor.unit ? `${visitor.unit.block}-${visitor.unit.number}` : null,
                     gateName: gate.name,
+                    photo: visitor.photo,
                     message: `New walk-in visitor at ${gate.name}`
                 });
 
-                // Also create database notifications for all guards so it shows up in their dropdown
+                // 2. Notify Specific Resident (Real-time)
+                if (residentId) {
+                    io.to(`user_${residentId}`).emit('resident_visitor_request', {
+                        id: visitor.id,
+                        name: visitor.name,
+                        purpose: visitor.purpose,
+                        gateName: gate.name,
+                        photo: visitor.photo,
+                        message: `${visitor.name} is at the ${gate.name} to meet you. Please approve/reject.`
+                    });
+                }
+
+                // 3. Create database notifications
+                const notificationData = [];
+
+                // For Guards
                 const guards = await prisma.user.findMany({
                     where: {
                         societyId: gate.societyId,
@@ -210,17 +253,41 @@ const GateController = {
                     }
                 });
 
-                if (guards.length > 0) {
-                    await prisma.notification.createMany({
-                        data: guards.map(guard => ({
-                            userId: guard.id,
-                            title: 'New Visitor Request',
-                            description: `${visitor.name} is waiting at ${gate.name} for ${visitor.purpose}`,
-                            type: 'visitor',
-                            metadata: { visitorId: visitor.id, gateId: gate.id }
-                        }))
+                guards.forEach(guard => {
+                    notificationData.push({
+                        userId: guard.id,
+                        title: 'New Visitor Request',
+                        description: `${visitor.name} is waiting at ${gate.name} for ${visitor.purpose}`,
+                        type: 'visitor',
+                        metadata: { visitorId: visitor.id, gateId: gate.id }
+                    });
+                });
+
+                // For Resident
+                if (residentId) {
+                    notificationData.push({
+                        userId: residentId,
+                        title: 'Visitor at Gate',
+                        description: `${visitor.name} is at ${gate.name} to meet you. Reason: ${visitor.purpose}`,
+                        type: 'visitor_approval',
+                        metadata: { visitorId: visitor.id, gateId: gate.id }
                     });
                 }
+
+                if (notificationData.length > 0) {
+                    await prisma.notification.createMany({
+                        data: notificationData
+                    });
+                }
+
+                // If resident is online, also send generic new_notification
+                if (residentId) {
+                    const residentNotification = notificationData.find(n => n.userId === residentId);
+                    if (residentNotification) {
+                        io.to(`user_${residentId}`).emit('new_notification', residentNotification);
+                    }
+                }
+
             } catch (ioErr) {
                 console.error('Notification creation failed:', ioErr);
             }

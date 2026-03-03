@@ -83,14 +83,15 @@ class ResidentController {
                 take: 5
             });
 
-            // 7. Dues – pending/overdue invoices for this unit
+            // 7. Dues – pending/overdue invoices for this specific resident
             let duesAmount = 0;
             let duesPenalty = 0;
             if (unit) {
                 const duesRows = await prisma.invoice.aggregate({
                     where: {
+                        residentId: userId, // Ensure we only see dues for the current resident
                         unitId: unit.id,
-                        status: { in: ['PENDING', 'OVERDUE'] }
+                        status: { in: ['PENDING', 'OVERDUE', 'pending', 'overdue'] }
                     },
                     _sum: { amount: true, penalty: true }
                 });
@@ -148,6 +149,67 @@ class ResidentController {
                 }
             });
 
+            // 11. Upcoming Dues Alert (logical: if due within 5 days and not paid)
+            let upcomingDuesAlert = null;
+            if (unit) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Normalize to start of day
+
+                const fiveDaysFromNow = new Date(today);
+                fiveDaysFromNow.setDate(today.getDate() + 5);
+
+                const upcomingInvoice = await prisma.invoice.findFirst({
+                    where: {
+                        residentId: userId,
+                        status: { in: ['PENDING', 'OVERDUE'] },
+                        dueDate: { lte: fiveDaysFromNow }
+                    },
+                    orderBy: { dueDate: 'asc' }
+                });
+
+                if (upcomingInvoice) {
+                    const invDueDate = new Date(upcomingInvoice.dueDate);
+                    invDueDate.setHours(0, 0, 0, 0);
+
+                    const diffTime = invDueDate - today;
+                    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                    // IF TODAY IS DUE DATE OR PAST -> RED ALERT (isOverdue: true)
+                    const isOverdue = diffDays <= 0;
+
+                    upcomingDuesAlert = {
+                        invoiceNo: upcomingInvoice.invoiceNo,
+                        amount: upcomingInvoice.amount,
+                        dueDate: upcomingInvoice.dueDate,
+                        daysLeft: diffDays,
+                        isOverdue: isOverdue
+                    };
+
+                    // Also create a notification if it's overdue and not already notified today
+                    if (isOverdue) {
+                        const existingNotif = await prisma.notification.findFirst({
+                            where: {
+                                userId,
+                                title: { contains: 'Urgent' },
+                                createdAt: { gte: today }
+                            }
+                        });
+
+                        if (!existingNotif) {
+                            await prisma.notification.create({
+                                data: {
+                                    userId,
+                                    title: 'Urgent: Payment Overdue',
+                                    description: `Your payment of ₹${upcomingInvoice.amount} for ${upcomingInvoice.invoiceNo} is overdue. Please pay immediately to avoid penalty.`,
+                                    type: 'payment',
+                                    metadata: { invoiceId: upcomingInvoice.id }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
             res.json({
                 societyName: society?.name ?? null,
                 unit: unit ? {
@@ -167,7 +229,8 @@ class ResidentController {
                     penaltyLabel: duesPenalty > 0 ? 'Overdue-Accrued Penalty' : null,
                     isDepositPending,
                     pendingDepositAmount,
-                    depositPaymentMethod
+                    depositPaymentMethod,
+                    upcomingDuesAlert // Added upcoming alert
                 },
                 announcements: announcements.map(a => ({
                     id: a.id,
@@ -325,7 +388,11 @@ class ResidentController {
                 unitNumber: `${unit.block}-${unit.number}`,
                 area: `${unit.areaSqFt} sq.ft`,
                 ownershipType: user.ownedUnits.length > 0 ? 'Owner' : 'Tenant',
-                moveInDate: unit.createdAt.toLocaleDateString(),
+                moveInDate: unit.leaseStartDate
+                    ? new Date(unit.leaseStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : unit.createdAt
+                        ? new Date(unit.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : 'N/A',
                 isRented: unit.tenantId !== null
             };
 

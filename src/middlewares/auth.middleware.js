@@ -11,7 +11,7 @@ const logToFile = (msg) => {
   try {
     const timestamp = new Date().toISOString();
     fs.appendFileSync(DEBUG_LOG_PATH, `[${timestamp}] [AUTH] ${msg}\n`);
-  } catch (e) {}
+  } catch (e) { }
 };
 
 const authenticate = async (req, res, next) => {
@@ -64,6 +64,7 @@ const authenticate = async (req, res, next) => {
     req.user = {
       ...decoded,
       id: user.id,
+      email: user.email,
       societyId: user.societyId,
       role: user.role,
     };

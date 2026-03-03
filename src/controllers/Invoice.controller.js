@@ -23,7 +23,8 @@ class InvoiceController {
                 where,
                 include: {
                     unit: true,
-                    resident: { select: { name: true, phone: true } }
+                    resident: { select: { name: true, phone: true } },
+                    items: true
                 },
                 orderBy: { createdAt: 'desc' }
             });
@@ -44,6 +45,7 @@ class InvoiceController {
                 maintenance: inv.maintenance,
                 utilities: inv.utilities,
                 penalty: inv.penalty,
+                items: inv.items, // Include breakdown items
                 dueDate: inv.dueDate.toISOString().split('T')[0],
                 status: inv.status.toLowerCase(),
                 paidDate: inv.paidDate ? inv.paidDate.toISOString().split('T')[0] : null,
@@ -75,14 +77,11 @@ class InvoiceController {
 
             const myUnitIds = myUnits.map(u => u.id);
 
-            // Get invoices by residentId OR by unit membership
+            // Get invoices only by residentId (linking them specifically to this user)
             const invoices = await prisma.invoice.findMany({
                 where: {
                     societyId,
-                    OR: [
-                        { residentId: userId },
-                        ...(myUnitIds.length > 0 ? [{ unitId: { in: myUnitIds } }] : [])
-                    ]
+                    residentId: userId
                 },
                 include: {
                     unit: { select: { number: true, block: true, type: true } },
@@ -184,7 +183,7 @@ class InvoiceController {
                 result.totalBilled += amount;
                 result.totalInvoices += count;
 
-                const status = s.status.toUpperCase();
+                const status = (s.status || '').toUpperCase();
 
                 if (status === 'PAID') {
                     result.totalCollection += amount;
@@ -228,30 +227,25 @@ class InvoiceController {
 
             const invoiceNo = `INV-${Date.now().toString().slice(-8)}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
 
-            // Fetch active charges
-            const charges = await prisma.chargeMaster.findMany({
-                where: { societyId, isActive: true }
-            });
-
-            const chargeTotal = charges.reduce((sum, c) => sum + (c.defaultAmount || 0), 0);
-
             const invoice = await prisma.invoice.create({
                 data: {
                     invoiceNo,
                     societyId,
                     unitId: unit.id,
                     residentId: unit.tenantId || unit.ownerId,
-                    amount: parseFloat(amount) + chargeTotal,
-                    maintenance: parseFloat(amount),
+                    amount: parseFloat(amount),
+                    maintenance: 0,
                     utilities: 0,
                     dueDate: new Date(dueDate),
                     status: 'PENDING',
-                    description: description || null,
+                    description: description || 'Manual Invoice',
                     items: {
-                        create: charges.map(c => ({
-                            name: c.name,
-                            amount: c.defaultAmount || 0
-                        }))
+                        create: [
+                            {
+                                name: description || 'Ad-hoc Charge',
+                                amount: parseFloat(amount)
+                            }
+                        ]
                     }
                 },
                 include: { items: true }
@@ -282,13 +276,17 @@ class InvoiceController {
                 where: { societyId, isActive: true }
             });
 
-            const yearMonth = month.replace('-', ''); // jan-2025 -> jan2025
+            // NORMALIZE month string to avoid case-mismatch duplicates
+            const yearMonth = month.replace('-', '').toLowerCase(); // jan-2025 -> jan2025
 
-            // Find existing invoices for this month to avoid duplicates
+            // Find existing invoices for this month to avoid duplicates (PENDING, PAID, or OVERDUE)
             const existingInvoices = await prisma.invoice.findMany({
                 where: {
                     societyId,
-                    invoiceNo: { startsWith: `INV-${yearMonth}-` }
+                    invoiceNo: {
+                        startsWith: `INV-${yearMonth}-`,
+                        mode: 'insensitive' // CRITICAL: ignore case for duplicate check
+                    }
                 },
                 select: { unitId: true }
             });
@@ -303,7 +301,7 @@ class InvoiceController {
                     continue;
                 }
 
-                const invoiceNo = `INV-${yearMonth}-${unit.block}${unit.number}-${Date.now().toString().slice(-4)}`;
+                const invoiceNo = `INV-${yearMonth}-${unit.block}${unit.number}-${Date.now().toString().slice(-4)}`.toLowerCase();
 
                 // Calculate total amount from charges
                 const chargeTotal = charges.reduce((sum, c) => sum + (c.defaultAmount || 0), 0);
@@ -354,7 +352,7 @@ class InvoiceController {
             const invoice = await prisma.invoice.update({
                 where: whereClause,
                 data: {
-                    status: 'PAID',
+                    status: 'PAID', // Always use uppercase for consistency in DB
                     paidDate: new Date(),
                     paymentMode: paymentMode || 'CASH'
                 }
@@ -375,6 +373,19 @@ class InvoiceController {
                     receivedFrom: invoice.residentId ? undefined : 'Resident' // We should ideally link user here but schema uses String
                 }
             });
+
+            // Notify the resident that their payment was received
+            if (invoice.residentId) {
+                await prisma.notification.create({
+                    data: {
+                        userId: invoice.residentId,
+                        title: 'Payment Confirmed! ✅',
+                        description: `We have received your payment of ₹${invoice.amount} for ${invoice.invoiceNo}. Your receipt is now available.`,
+                        type: 'payment',
+                        metadata: { invoiceId: invoice.id }
+                    }
+                });
+            }
 
             res.json(invoice);
         } catch (error) {
@@ -672,6 +683,152 @@ class InvoiceController {
         } catch (error) {
             console.error('Apply Late Fees Error:', error);
             res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async sendUpcomingReminders(req, res) {
+        try {
+            const today = new Date();
+            const fiveDaysFromNow = new Date();
+            fiveDaysFromNow.setDate(today.getDate() + 5);
+
+            let societyId = req?.user?.societyId;
+
+            let upcomingInvoices = [];
+            if (societyId) {
+                // Manual trigger from Admin UI
+                upcomingInvoices = await prisma.invoice.findMany({
+                    where: {
+                        societyId,
+                        status: { in: ['PENDING', 'OVERDUE'] },
+                        dueDate: { gte: today, lte: fiveDaysFromNow }
+                    },
+                    include: { resident: true }
+                });
+            } else {
+                // Background process – check for all societies
+                upcomingInvoices = await prisma.invoice.findMany({
+                    where: {
+                        status: { in: ['PENDING', 'OVERDUE'] },
+                        dueDate: { gte: today, lte: fiveDaysFromNow }
+                    },
+                    include: { resident: true }
+                });
+            }
+
+            let count = 0;
+            for (const inv of upcomingInvoices) {
+                if (inv.residentId) {
+                    const dueDateStr = inv.dueDate.toLocaleDateString();
+                    await prisma.notification.create({
+                        data: {
+                            userId: inv.residentId,
+                            title: 'Payment Reminder',
+                            description: `Reminder: Your payment of ₹${inv.amount} for invoice ${inv.invoiceNo} is due on ${dueDateStr}. Please pay on time to avoid late fees.`,
+                            type: 'payment',
+                            metadata: { invoiceId: inv.id, invoiceNo: inv.invoiceNo, amount: inv.amount, dueDate: inv.dueDate }
+                        }
+                    });
+                    count++;
+                }
+            }
+
+            if (res) res.json({ success: true, notificationsSent: count });
+            return count;
+        } catch (error) {
+            console.error('Send Upcoming Reminders Error:', error);
+            if (res) res.status(500).json({ error: error.message });
+        }
+    }
+
+    static async autoGenerateFixedInvoices(req, res) {
+        try {
+            console.log('Background Job: Starting auto-generation of fixed invoices...');
+            const now = new Date();
+            const monthNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+            const currentMonthYear = `${monthNames[now.getMonth()]}-${now.getFullYear()}`;
+            const monthPrefix = currentMonthYear.replace('-', '').toLowerCase();
+
+            // Find all units that have fixed rent or maintenance charges
+            const units = await prisma.unit.findMany({
+                where: {
+                    OR: [
+                        { rentAmount: { gt: 0 } },
+                        { maintenanceCharges: { gt: 0 } }
+                    ],
+                    status: 'OCCUPIED'
+                },
+                include: { society: true }
+            });
+
+            console.log(`Found ${units.length} units with fixed charges.`);
+
+            let count = 0;
+            for (const unit of units) {
+                const residentId = unit.tenantId || unit.ownerId;
+                if (!residentId) continue;
+
+                // Check if invoice already exists for this month/unit
+                const existing = await prisma.invoice.findFirst({
+                    where: {
+                        unitId: unit.id,
+                        invoiceNo: {
+                            startsWith: `INV-${monthPrefix}-`,
+                            mode: 'insensitive'
+                        }
+                    }
+                });
+
+                if (existing) continue;
+
+                const amount = (unit.rentAmount || 0) + (unit.maintenanceCharges || 0);
+                if (amount <= 0) continue;
+
+                const invoiceNo = `INV-${monthPrefix}-${unit.block}${unit.number}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`.toLowerCase();
+
+                // Due date is usually 10 days from now or end of month
+                const dueDate = new Date();
+                dueDate.setDate(now.getDate() + 10);
+
+                await prisma.invoice.create({
+                    data: {
+                        invoiceNo,
+                        societyId: unit.societyId,
+                        unitId: unit.id,
+                        residentId,
+                        amount,
+                        maintenance: unit.maintenanceCharges || 0,
+                        utilities: unit.rentAmount || 0,
+                        dueDate,
+                        status: 'PENDING',
+                        description: `Automated Monthly Bill - ${currentMonthYear}`,
+                        items: {
+                            create: [
+                                { name: 'Monthly Maintenance', amount: unit.maintenanceCharges || 0 },
+                                { name: 'Monthly Rent', amount: unit.rentAmount || 0 }
+                            ].filter(i => i.amount > 0)
+                        }
+                    }
+                });
+
+                // Notify resident
+                await prisma.notification.create({
+                    data: {
+                        userId: residentId,
+                        title: 'New Bill Generated 📄',
+                        description: `Your monthly bill of ₹${amount} for ${currentMonthYear} has been generated. Please pay by ${dueDate.toLocaleDateString()}.`,
+                        type: 'payment'
+                    }
+                });
+
+                count++;
+            }
+
+            console.log(`Auto-generated ${count} invoices.`);
+            if (res) res.json({ message: `Successfully auto-generated ${count} invoices.`, count });
+        } catch (error) {
+            console.error('Auto-Generate Invoices Error:', error);
+            if (res) res.status(500).json({ error: error.message });
         }
     }
 }
