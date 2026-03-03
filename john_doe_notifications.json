@@ -1,0 +1,521 @@
+[
+  {
+    "id": 10,
+    "userId": 3,
+    "title": "New message from testrecident",
+    "description": "hy",
+    "type": "chat_message",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-01-28T07:55:29.290Z"
+  },
+  {
+    "id": 94,
+    "userId": 3,
+    "title": "Property Lead Status Updated",
+    "description": "Your property lead \"test\" status changed to: Contacted",
+    "type": "property_lead_status",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-02-20T23:18:32.001Z"
+  },
+  {
+    "id": 95,
+    "userId": 3,
+    "title": "Property Lead Status Updated",
+    "description": "Your property lead \"test\" status changed to: New Lead",
+    "type": "property_lead_status",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-02-20T23:23:13.998Z"
+  },
+  {
+    "id": 96,
+    "userId": 3,
+    "title": "Property Lead Status Updated",
+    "description": "Your property lead \"test\" status changed to: Closed",
+    "type": "property_lead_status",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-02-20T23:23:22.304Z"
+  },
+  {
+    "id": 97,
+    "userId": 3,
+    "title": "Property Lead Status Updated",
+    "description": "Your property lead \"test\" status changed to: New Lead",
+    "type": "property_lead_status",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-02-20T23:23:25.394Z"
+  },
+  {
+    "id": 98,
+    "userId": 3,
+    "title": "Property Lead Status Updated",
+    "description": "Your property lead \"test\" status changed to: Contacted",
+    "type": "property_lead_status",
+    "read": false,
+    "metadata": null,
+    "createdAt": "2026-02-20T23:23:39.676Z"
+  },
+  {
+    "id": 109,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "test (98765432190) scanned your QR code for car1. Reason: htghtg",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "cdb426b3-46fd-4e2d-886f-08071e2477bd",
+      "visitorName": "test",
+      "visitorPhone": "98765432190",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-02-28T19:43:50.845Z"
+  },
+  {
+    "id": 110,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "tesr (876589867665) scanned your QR code for car1. Reason: hgjgh",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "c3d5c106-0fd8-4ac0-99eb-2e012e853956",
+      "visitorName": "tesr",
+      "visitorPhone": "876589867665",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-02-28T19:49:33.121Z"
+  },
+  {
+    "id": 111,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "ht (989676857) scanned your QR code for car1. Reason: gfgf",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "c80ba1dd-7478-4303-9d4e-7e9d66f5f82e",
+      "visitorName": "ht",
+      "visitorPhone": "989676857",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-02-28T19:50:30.644Z"
+  },
+  {
+    "id": 119,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:03:46.276Z"
+  },
+  {
+    "id": 120,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:03:46.281Z"
+  },
+  {
+    "id": 122,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:16:03.834Z"
+  },
+  {
+    "id": 123,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:16:03.839Z"
+  },
+  {
+    "id": 125,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:21:26.653Z"
+  },
+  {
+    "id": 126,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:21:26.658Z"
+  },
+  {
+    "id": 129,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:27:45.469Z"
+  },
+  {
+    "id": 130,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:27:45.473Z"
+  },
+  {
+    "id": 132,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:33:51.739Z"
+  },
+  {
+    "id": 133,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:33:51.745Z"
+  },
+  {
+    "id": 135,
+    "userId": 3,
+    "title": "Urgent: Payment Overdue",
+    "description": "Your payment of ₹1200 for INV-feb2026-A101-3179 is overdue. Please pay immediately to avoid penalty.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2
+    },
+    "createdAt": "2026-03-02T20:36:16.090Z"
+  },
+  {
+    "id": 136,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:42:14.414Z"
+  },
+  {
+    "id": 137,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:42:14.419Z"
+  },
+  {
+    "id": 139,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:46:37.795Z"
+  },
+  {
+    "id": 140,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:46:37.801Z"
+  },
+  {
+    "id": 142,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:50:50.494Z"
+  },
+  {
+    "id": 143,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T20:50:50.506Z"
+  },
+  {
+    "id": 145,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T22:20:31.470Z"
+  },
+  {
+    "id": 146,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T22:20:31.477Z"
+  },
+  {
+    "id": 148,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T22:43:34.866Z"
+  },
+  {
+    "id": 149,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T22:43:34.872Z"
+  },
+  {
+    "id": 151,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-3179 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2,
+      "invoiceNo": "INV-feb2026-A101-3179",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T23:17:06.588Z"
+  },
+  {
+    "id": 152,
+    "userId": 3,
+    "title": "Payment Reminder",
+    "description": "Reminder: Your payment of ₹1200 for invoice INV-feb2026-A101-0839 is due on 2/3/2026. Please pay on time to avoid late fees.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 7,
+      "invoiceNo": "INV-feb2026-A101-0839",
+      "amount": 1200,
+      "dueDate": "2026-03-03T00:00:00.000Z"
+    },
+    "createdAt": "2026-03-02T23:17:06.595Z"
+  },
+  {
+    "id": 154,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "KAPIL (06767565656) scanned your QR code for car1. Reason: GFGF",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "65338449-3f39-4389-a652-c1b97837fd97",
+      "visitorName": "KAPIL",
+      "visitorPhone": "06767565656",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-03-03T00:04:08.483Z"
+  },
+  {
+    "id": 155,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "HGH (6767675657) scanned your QR code for car1. Reason: BBG",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "c507b711-ba96-4ce8-9656-05b9716f446a",
+      "visitorName": "HGH",
+      "visitorPhone": "6767675657",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-03-03T00:05:29.536Z"
+  },
+  {
+    "id": 156,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "gggg (56565343) scanned your QR code for car1. Reason: gfh",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "c0b4edc5-fccc-44cc-9d2f-4a5e6f6f0071",
+      "visitorName": "gggg",
+      "visitorPhone": "56565343",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-03-03T00:46:22.316Z"
+  },
+  {
+    "id": 157,
+    "userId": 3,
+    "title": "🚨 Emergency QR Scanned",
+    "description": "bhgh (56576787784) scanned your QR code for car1. Reason: bfgf",
+    "type": "emergency_qr",
+    "read": false,
+    "metadata": {
+      "logId": "e86f0bf6-0626-4bdf-8ead-100cde7c15a0",
+      "visitorName": "bhgh",
+      "visitorPhone": "56576787784",
+      "barcodeId": "eb-udbffnmccv8"
+    },
+    "createdAt": "2026-03-03T00:54:28.526Z"
+  },
+  {
+    "id": 194,
+    "userId": 3,
+    "title": "Urgent: Payment Overdue",
+    "description": "Your payment of ₹1200 for INV-feb2026-A101-3179 is overdue. Please pay immediately to avoid penalty.",
+    "type": "payment",
+    "read": false,
+    "metadata": {
+      "invoiceId": 2
+    },
+    "createdAt": "2026-03-03T20:10:28.914Z"
+  }
+]

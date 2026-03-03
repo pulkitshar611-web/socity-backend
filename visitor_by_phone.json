@@ -1,0 +1,24 @@
+[
+  {
+    "id": 11,
+    "name": "test2",
+    "phone": "1234567890",
+    "vehicleNo": "23456789",
+    "purpose": "Maid/Cook",
+    "photo": null,
+    "whomToMeet": null,
+    "fromLocation": null,
+    "status": "CHECKED_IN",
+    "entryTime": "2026-01-30T09:26:17.282Z",
+    "exitTime": null,
+    "societyId": 1,
+    "visitingUnitId": 2,
+    "residentId": null,
+    "checkedInById": 19,
+    "idType": null,
+    "idNumber": null,
+    "gateId": null,
+    "createdAt": "2026-01-30T09:26:17.285Z",
+    "updatedAt": "2026-01-30T09:26:17.285Z"
+  }
+]

@@ -1,4 +1,5 @@
 const prisma = require('../lib/prisma');
+const { getIO } = require('../lib/socket');
 
 const MoveRequestController = {
   // List all move requests with filters
@@ -10,7 +11,6 @@ const MoveRequestController = {
 
       const where = { societyId };
 
-      // If resident, only show requests for their units
       if (role === 'RESIDENT') {
         const userUnits = await prisma.unit.findMany({
           where: {
@@ -22,11 +22,39 @@ const MoveRequestController = {
           select: { id: true }
         });
         const unitIds = userUnits.map(u => u.id);
-        where.unitId = { in: unitIds };
+
+        // Add OR condition for resident: either it matches their unit, OR they created it (matching by phone)
+        where.OR = [
+          { unitId: { in: unitIds } },
+          { phone: req.user.phone }
+        ];
       }
 
       if (type && type !== 'all') where.type = type.toUpperCase().replace('-', '_');
       if (status && status !== 'all') where.status = status.toUpperCase();
+
+      // Search functionality
+      if (search && search.trim()) {
+        const searchCondition = {
+          OR: [
+            { residentName: { contains: search } },
+            { phone: { contains: search } },
+            { notes: { contains: search } },
+            { unit: { number: { contains: search } } }
+          ]
+        };
+
+        // If we already have an OR (from resident check), wrap everything in AND
+        if (where.OR) {
+          where.AND = [
+            { OR: where.OR },
+            searchCondition
+          ];
+          delete where.OR;
+        } else {
+          where.OR = searchCondition.OR;
+        }
+      }
 
       const requests = await prisma.moveRequest.findMany({
         where,
@@ -151,7 +179,7 @@ const MoveRequestController = {
           include: { owner: true, tenant: true }
         });
         const targetUser = targetUnit?.tenant || targetUnit?.owner;
-        
+
         if (targetUser) {
           await prisma.notification.create({
             data: {
@@ -162,6 +190,53 @@ const MoveRequestController = {
               metadata: { moveRequestId: request.id, amount: finalDepositAmount }
             }
           });
+        }
+      }
+
+      // Notify society admins about the new request
+      const admins = await prisma.user.findMany({
+        where: {
+          societyId,
+          role: { in: ['ADMIN', 'COMMUNITY_MANAGER'] },
+          status: 'ACTIVE'
+        },
+        select: { id: true }
+      });
+
+      if (admins.length > 0) {
+        const typeLabel = normalizedType === 'MOVE_IN' ? 'Move-In' : 'Move-Out';
+        const unitLabel = request.unit ? `${request.unit.block}-${request.unit.number}` : 'N/A';
+
+        // Create notifications for all admins
+        await Promise.all(admins.map(admin =>
+          prisma.notification.create({
+            data: {
+              userId: admin.id,
+              title: `New ${typeLabel} Request`,
+              description: `${residentName} has submitted a ${typeLabel} request for unit ${unitLabel}.`,
+              type: 'move_request',
+              metadata: { moveRequestId: request.id, type: normalizedType }
+            }
+          })
+        ));
+
+        // Emit socket events to each admin individually
+        try {
+          const io = getIO();
+          admins.forEach(admin => {
+            // Send to admin's private room
+            io.to(`user_${admin.id}`).emit('new_notification', {
+              title: `New ${typeLabel} Request`,
+              description: `${residentName} for unit ${unitLabel}`,
+              type: 'move_request',
+              moveRequestId: request.id
+            });
+
+            // Also emit the specific move request event to their room for dashboard refresh
+            io.to(`user_${admin.id}`).emit('new_move_request', request);
+          });
+        } catch (socketErr) {
+          console.error('Socket emission for move request notification failed:', socketErr);
         }
       }
 
@@ -282,7 +357,7 @@ const MoveRequestController = {
             });
           } else if (isMoveOut) {
             const refundAmount = updatedRequest.unit?.securityDeposit || 0;
-            
+
             if (refundAmount > 0) {
               // 1. Create EXPENSE Transaction
               await tx.transaction.create({
@@ -310,6 +385,49 @@ const MoveRequestController = {
                 where: { id: updatedRequest.id },
                 data: { depositStatus: 'REFUNDED' }
               });
+
+              // 4. Notify Resident to Confirm Refund Received
+              const movingUser = await tx.user.findFirst({
+                where: {
+                  phone: updatedRequest.phone,
+                  societyId: updatedRequest.societyId,
+                  role: 'RESIDENT'
+                }
+              });
+
+              if (movingUser) {
+                // Create a specially typed notification that the frontend can listen for and show a popup
+                await tx.notification.create({
+                  data: {
+                    userId: movingUser.id,
+                    title: 'Final Settlement: Refund Received?',
+                    description: `Admin has processed your security deposit refund of ₹${refundAmount}. Please confirm if you have received it to complete your move-out process.`,
+                    type: 'MOVE_OUT_REFUND_CONFIRMATION',
+                    metadata: {
+                      moveRequestId: updatedRequest.id,
+                      amount: refundAmount,
+                      unitId: updatedRequest.unitId
+                    }
+                  }
+                });
+
+                // Emit socket event for real-time popup
+                try {
+                  const io = getIO();
+                  io.to(`user_${movingUser.id}`).emit('new_notification', {
+                    title: 'Refund Received?',
+                    description: `Confirm your refund of ₹${refundAmount}`,
+                    type: 'MOVE_OUT_REFUND_CONFIRMATION',
+                    moveRequestId: updatedRequest.id
+                  });
+                } catch (socketErr) {
+                  console.error('Socket emission for refund confirmation failed:', socketErr);
+                }
+
+                console.log(`Refund confirmation notification sent to Resident ${movingUser.name}`);
+              } else {
+                console.warn(`Could not find user for move-out phone ${updatedRequest.phone} to send refund confirmation.`);
+              }
             }
           }
         }
@@ -324,6 +442,71 @@ const MoveRequestController = {
     } catch (error) {
       console.error('Update status error:', error);
       res.status(500).json({ success: false, error: 'Failed to update status' });
+    }
+  },
+
+  // Resident confirms refund receipt
+  confirmRefund: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      const moveRequest = await prisma.moveRequest.findUnique({
+        where: { id: parseInt(id) },
+        include: { unit: true }
+      });
+
+      if (!moveRequest) {
+        return res.status(404).json({ success: false, error: 'Move request not found' });
+      }
+
+      // Finalize the move-out: Suspend user and mark unit vacant
+      await prisma.$transaction(async (tx) => {
+        // 1. Mark notification as read
+        await tx.notification.updateMany({
+          where: {
+            userId,
+            type: 'MOVE_OUT_REFUND_CONFIRMATION',
+            read: false
+          },
+          data: { read: true }
+        });
+
+        // 2. Suspend the user
+        await tx.user.update({
+          where: { id: userId },
+          data: { status: 'SUSPENDED' }
+        });
+
+        // 3. Mark unit as vacant
+        if (moveRequest.unitId) {
+          await tx.unit.update({
+            where: { id: moveRequest.unitId },
+            data: {
+              status: 'VACANT',
+              tenantId: moveRequest.unit?.tenantId === userId ? null : moveRequest.unit?.tenantId
+            }
+          });
+        }
+
+        // 4. Log the confirmation in move request notes
+        await tx.moveRequest.update({
+          where: { id: moveRequest.id },
+          data: {
+            notes: moveRequest.notes + `\n[CONFIRMED] Resident confirmed refund receipt on ${new Date().toLocaleString()}`
+          }
+        });
+      });
+
+      console.log(`Resident ${userId} confirmed refund and is now SUSPENDED. Unit ${moveRequest.unitId} is VACANT.`);
+
+      res.json({
+        success: true,
+        message: 'Refund confirmed. Your move-out is complete. You will be logged out shortly.'
+      });
+    } catch (error) {
+      console.error('Confirm refund error:', error);
+      res.status(500).json({ success: false, error: 'Failed to confirm refund' });
     }
   },
 

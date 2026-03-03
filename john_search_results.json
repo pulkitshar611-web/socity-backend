@@ -1,0 +1,24 @@
+[
+  {
+    "id": 18,
+    "name": "jhon aaa",
+    "phone": "9474555553",
+    "vehicleNo": "21345453",
+    "purpose": "Other",
+    "photo": null,
+    "whomToMeet": "ram",
+    "fromLocation": "dbsasd",
+    "status": "EXITED",
+    "entryTime": "2026-02-22T01:29:46.484Z",
+    "exitTime": "2026-02-22T01:30:57.612Z",
+    "societyId": 1,
+    "visitingUnitId": 3,
+    "residentId": null,
+    "checkedInById": 5,
+    "idType": null,
+    "idNumber": null,
+    "gateId": 1,
+    "createdAt": "2026-02-22T01:29:14.347Z",
+    "updatedAt": "2026-02-22T01:30:57.614Z"
+  }
+]

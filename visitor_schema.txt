@@ -1,0 +1,37 @@
+model Visitor {
+  id        Int     @id @default(autoincrement())
+  name      String
+  phone     String
+  vehicleNo String?
+  purpose   String?
+  photo     String?
+  whomToMeet String?
+  fromLocation String?
+
+  status    String    @default("PENDING") // PENDING, APPROVED, CHECKED_IN, CHECKED_OUT, REJECTED
+  entryTime DateTime?
+  exitTime  DateTime?
+
+  societyId Int
+  society   Society @relation(fields: [societyId], references: [id])
+
+  visitingUnitId Int
+  unit           Unit @relation(fields: [visitingUnitId], references: [id])
+
+  residentId Int?
+  resident   User? @relation(fields: [residentId], references: [id])
+
+  checkedInById Int?  // Guard who checked in / approved this visitor
+  checkedInBy   User? @relation("VisitorCheckedInBy", fields: [checkedInById], references: [id])
+
+  idType   String? // Aadhar, DL
+  idNumber String?
+
+  gateId Int?
+  gate   Gate? @relation(fields: [gateId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("visitor")
+}

@@ -18,6 +18,9 @@ router.patch('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), MoveRequestController.
 // Update status
 router.patch('/:id/status', authorize(['ADMIN', 'SUPER_ADMIN']), MoveRequestController.updateStatus);
 
+// Confirm refund (Resident only)
+router.post('/:id/confirm-refund', authorize(['RESIDENT']), MoveRequestController.confirmRefund);
+
 // Delete move request
 router.delete('/:id', authorize(['ADMIN', 'SUPER_ADMIN']), MoveRequestController.delete);
 

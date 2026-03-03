@@ -1,0 +1,19 @@
+[
+  {
+    "id": 3,
+    "email": "resident1@society.com",
+    "password": "$2b$10$/NLEQTQ62b8Up6OTlRMyGOEU6etFR4i/CwUaojgAjNo5PICXGED/m",
+    "name": "John Doe",
+    "phone": "1234567890",
+    "role": "RESIDENT",
+    "status": "ACTIVE",
+    "profileImg": null,
+    "roleId": null,
+    "societyId": 1,
+    "pinCode": null,
+    "assignedVendorId": null,
+    "addedByUserId": 2,
+    "createdAt": "2026-01-24T21:03:20.336Z",
+    "updatedAt": "2026-03-01T00:26:01.553Z"
+  }
+]

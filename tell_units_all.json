@@ -1,0 +1,27 @@
+[
+  {
+    "id": 2,
+    "block": "A",
+    "number": "102",
+    "floor": 1,
+    "type": "2BHK",
+    "areaSqFt": 1200,
+    "status": "OCCUPIED",
+    "pets": 0,
+    "membersCount": 0,
+    "societyId": 1,
+    "ownerId": 36,
+    "tenantId": null,
+    "leaseStartDate": null,
+    "leaseEndDate": null,
+    "rentAmount": null,
+    "securityDeposit": 0,
+    "maintenanceCharges": null,
+    "parkingSlot": null,
+    "vehicleNumber": null,
+    "notes": null,
+    "emergencyContact": null,
+    "createdAt": "2026-01-24T21:03:21.062Z",
+    "updatedAt": "2026-03-03T19:32:27.895Z"
+  }
+]

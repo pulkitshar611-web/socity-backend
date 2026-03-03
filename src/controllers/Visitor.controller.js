@@ -327,6 +327,50 @@ class VisitorController {
           societyId
         }
       });
+
+      // Notify Guards and Admins
+      try {
+        const io = require('../lib/socket').getIO();
+        const notificationPayload = {
+          id: visitor.id,
+          name: visitor.name,
+          purpose: visitor.purpose,
+          unit: unitId ? unitId : null,
+          message: `Resident pre-approved a visitor: ${visitor.name}`
+        };
+
+        io.to(`society_${societyId}`).emit('new_visitor_request', notificationPayload);
+
+        const securityStaff = await prisma.user.findMany({
+          where: { societyId, role: { in: ['ADMIN', 'COMMUNITY-MANAGER', 'GUARD'] } }
+        });
+
+        const notifications = securityStaff.map(staff => ({
+          userId: staff.id,
+          title: 'Pre-Approved Visitor',
+          description: `A resident pre-approved a visitor named ${visitor.name}.`,
+          type: 'visitor',
+          metadata: { visitorId: visitor.id }
+        }));
+
+        if (notifications.length > 0) {
+          await prisma.notification.createMany({ data: notifications });
+        }
+
+        securityStaff.forEach(staff => {
+          if (staff.role !== 'GUARD') {
+            io.to(`user_${staff.id}`).emit('new_notification', {
+              title: 'Pre-Approved Visitor',
+              description: `A resident pre-approved a visitor named ${visitor.name}.`,
+              type: 'visitor'
+            });
+          }
+        });
+
+      } catch (ioErr) {
+        console.error('Notification creation failed for preApprove:', ioErr);
+      }
+
       res.status(201).json(visitor);
     } catch (error) {
       console.error(error);

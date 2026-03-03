@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "block": "A",
+    "number": "101",
+    "floor": 1,
+    "type": "3BHK",
+    "areaSqFt": 1500,
+    "status": "OCCUPIED",
+    "pets": 0,
+    "membersCount": 0,
+    "societyId": 1,
+    "ownerId": 3,
+    "tenantId": null,
+    "leaseStartDate": null,
+    "leaseEndDate": null,
+    "rentAmount": null,
+    "securityDeposit": null,
+    "maintenanceCharges": null,
+    "parkingSlot": null,
+    "vehicleNumber": null,
+    "notes": null,
+    "emergencyContact": null,
+    "createdAt": "2026-01-24T21:03:21.050Z",
+    "updatedAt": "2026-01-25T00:42:38.737Z"
+  }
+]
