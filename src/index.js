@@ -143,29 +143,41 @@ const InvoiceController = require('./controllers/Invoice.controller');
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT} (with Socket.io support)`);
 
+  // Helper to run background tasks with retries
+  const runWithRetry = async (taskName, taskFn, maxRetries = 3) => {
+    let attempt = 1;
+    while (attempt <= maxRetries) {
+      try {
+        await taskFn();
+        return; // Success
+      } catch (err) {
+        console.error(`Attempt ${attempt} failed for task "${taskName}":`, err.message);
+        if (attempt === maxRetries) {
+          console.error(`Task "${taskName}" failed after ${maxRetries} attempts.`);
+        } else {
+          const delay = attempt * 5000; // Exponential backoff: 5s, 10s...
+          console.log(`Retrying "${taskName}" in ${delay / 1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        attempt++;
+      }
+    }
+  };
+
   // Set up background job to send payment reminders every 24 hours
   setInterval(async () => {
     console.log('--- RUNNING AUTOMATED BACKGROUND JOBS ---');
-    try {
-      // 1. Send Payment Reminders
-      const remindCount = await InvoiceController.sendUpcomingReminders();
-      console.log(`Job Complete: ${remindCount} reminders sent.`);
-
-      // 2. Generate Monthly Fixed Invoices (Automated Billing)
-      await InvoiceController.autoGenerateFixedInvoices();
-    } catch (err) {
-      console.error('Background Jobs Error:', err);
-    }
+    // 1. Send Payment Reminders
+    runWithRetry('Payment Reminders', () => InvoiceController.sendUpcomingReminders());
+    
+    // 2. Generate Monthly Fixed Invoices (Automated Billing)
+    runWithRetry('Auto-generate Invoices', () => InvoiceController.autoGenerateFixedInvoices());
   }, 24 * 60 * 60 * 1000);
 
-  // Run once on startup after 1 minute (to avoid overloading startup)
+  // Run once on startup after 30 seconds (to allow DB proxy to stabilize)
   setTimeout(async () => {
     console.log('Starting initial background job check...');
-    try {
-      await InvoiceController.sendUpcomingReminders();
-      await InvoiceController.autoGenerateFixedInvoices();
-    } catch (err) {
-      console.error('Initial Background Job Error:', err);
-    }
-  }, 6 * 1000); // Wait 60 seconds (but 6s for quick testing in dev if needed, user said 1min)
+    runWithRetry('Startup: Payment Reminders', () => InvoiceController.sendUpcomingReminders());
+    runWithRetry('Startup: Auto-generate Invoices', () => InvoiceController.autoGenerateFixedInvoices());
+  }, 30 * 1000); 
 });

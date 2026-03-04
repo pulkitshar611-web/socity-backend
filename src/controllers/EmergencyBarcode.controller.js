@@ -148,7 +148,7 @@ class EmergencyBarcodeController {
       
       const newId = `eb-reg-${Math.random().toString(36).substring(2, 15)}`;
       // Use the live domain for the QR code URL
-      const publicUrl = `https://socity.kiaantechnology.com/emergency/${newId}`;
+      const publicUrl = `https://socity.kiaantechnology.com/emergency?id=${newId}`;
       const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(publicUrl)}`;
 
       const newBarcode = await prisma.emergencyBarcode.create({
